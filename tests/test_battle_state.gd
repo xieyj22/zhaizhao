@@ -1,5 +1,10 @@
 extends GutTest
 
+var t: Tuning
+
+func before_each():
+	t = Tuning.new()
+
 func _make_1v1() -> BattleState:
 	var s := BattleState.new()
 	var a := UnitState.new(); a.id=&"a"; a.team=0; a.grid_pos=Vector2i(1,3)
@@ -36,3 +41,35 @@ func test_roundtrip():
 	assert_eq(s2.units.size(), 2)
 	assert_eq(s2.units[0].id, &"a")
 	assert_eq(s2.units[1].grid_pos, Vector2i(5,3))
+
+func test_outcome_ongoing_when_two_teams_under_cap():
+	var s := _make_1v1()
+	s.turn = 5
+	assert_eq(s.outcome(t), BattleState.Outcome.ONGOING)
+
+func test_outcome_draw_at_cap_with_two_teams():
+	var s := _make_1v1()
+	s.turn = t.morale_cap_turn
+	assert_eq(s.outcome(t), BattleState.Outcome.DRAW)
+
+func test_outcome_team0_win():
+	var s := _make_1v1()
+	s.units[1].alive = false
+	assert_eq(s.outcome(t), BattleState.Outcome.TEAM0_WIN)
+
+func test_outcome_team1_win():
+	var s := _make_1v1()
+	s.units[0].alive = false
+	assert_eq(s.outcome(t), BattleState.Outcome.TEAM1_WIN)
+
+func test_outcome_draw_when_both_dead():
+	var s := _make_1v1()
+	s.units[0].alive = false
+	s.units[1].alive = false
+	assert_eq(s.outcome(t), BattleState.Outcome.DRAW)
+
+func test_outcome_last_turn_kill_is_win_not_draw():
+	var s := _make_1v1()
+	s.turn = t.morale_cap_turn
+	s.units[1].alive = false
+	assert_eq(s.outcome(t), BattleState.Outcome.TEAM0_WIN)

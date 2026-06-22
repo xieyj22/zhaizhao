@@ -1,6 +1,8 @@
 class_name BattleState
 extends RefCounted
 
+enum Outcome { ONGOING, TEAM0_WIN, TEAM1_WIN, DRAW }
+
 ## 战场状态：单位列表 + 网格 + 回合数。JSON-safe。
 var units: Array = []                      # Array[UnitState]
 var grid_size: Vector2i = Vector2i(7, 7)
@@ -24,6 +26,15 @@ func alive_teams() -> Array:
 
 func is_over() -> bool:
 	return alive_teams().size() <= 1
+
+## M1：含平局的终局判定（spec §5）。is_over() 不含 DRAW，故 M1 用 outcome()!=ONGOING 判终止。
+func outcome(t: Tuning) -> int:
+	var teams := alive_teams()
+	if teams.size() >= 2:
+		return Outcome.ONGOING if turn < t.morale_cap_turn else Outcome.DRAW
+	if teams.is_empty():
+		return Outcome.DRAW
+	return Outcome.TEAM0_WIN if teams[0] == 0 else Outcome.TEAM1_WIN
 
 func to_dict() -> Dictionary:
 	return {
