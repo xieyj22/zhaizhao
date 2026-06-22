@@ -5,131 +5,159 @@ const CELL := 64
 
 var state: BattleState
 var orch: TurnOrchestrator
+var tuning: Tuning
 var view: BattleView
 
-# 谁在选、选了什么
-var pending: Dictionary = {}     # unit.id -> Resolver.Action
+var pending: Dictionary = {}            # unit.id(String) -> Resolver.Action（玩家已下指令）
+var awaiting_target: Dictionary = {}    # unit.id(String) -> Technique（选招了打击，等点目标）
 
-# 内置极简招式（M0 占位；M1 起改读 .tres）
-func _strike() -> Technique:
-	var t := Technique.new()
-	t.id = &"strike"; t.display_name = "打击"
-	t.type = Technique.Type.STRIKE
-	t.base_damage = 5; t.speed = 5; t.opening_dealt = 1
-	t.resulting_stance = Stance.Id.METAL
-	return t
-
-func _step(dx: int, dy: int) -> Technique:
-	var t := Technique.new()
-	t.id = &"step"; t.display_name = "进退步"
-	t.type = Technique.Type.MOVE
-	t.speed = 6; t.move_delta = Vector2i(dx, dy)
-	t.resulting_stance = Stance.Id.METAL
-	return t
-
-func _to_stance(s: int, name: String) -> Technique:
-	var t := Technique.new()
-	t.id = StringName(name); t.display_name = name
-	t.type = Technique.Type.STANCE_SWITCH
-	t.speed = 7; t.resulting_stance = s
-	return t
+var _layer: CanvasLayer
+var _panel: VBoxContainer
+var _target_panel: VBoxContainer
+var _hud: Label
 
 func _ready() -> void:
-	# 初始状态：两队各 1 人，对角站位
+	tuning = Tuning.new()
 	state = BattleState.new()
 	state.grid_size = GRID
-	var a := UnitState.new()
-	a.id = &"玩家"; a.team = 0; a.grid_pos = Vector2i(1, 3); a.stance = Stance.Id.METAL
-	a.hp = 20; a.max_hp = 20
-	var b := UnitState.new()
-	b.id = &"对手"; b.team = 1; b.grid_pos = Vector2i(5, 3); b.stance = Stance.Id.WOOD
-	b.hp = 20; b.max_hp = 20
-	state.units = [a, b]
-
-	orch = TurnOrchestrator.new(state, Tuning.new())
+	# 2v2：玩家 team0 左列，敌方 team1 右列
+	state.units = [
+		_mk(&"玩家甲", 0, Vector2i(1, 2), Stance.Id.METAL),
+		_mk(&"玩家乙", 0, Vector2i(1, 4), Stance.Id.WOOD),
+		_mk(&"敌甲", 1, Vector2i(5, 2), Stance.Id.WOOD),
+		_mk(&"敌乙", 1, Vector2i(5, 4), Stance.Id.METAL),
+	]
+	orch = TurnOrchestrator.new(state, tuning)
 
 	view = BattleView.new()
-	view.cell = CELL
-	view.grid_size = GRID
-	view.state = state
+	view.cell = CELL; view.grid_size = GRID; view.state = state
 	add_child(view)
 
 	_build_ui()
-	view.queue_redraw()
+	_refresh()
 
-# ---------- UI（代码生成，避免手搓 .tscn 控件树）----------
-var _btns: Array = []        # Button 列表
-var _label: Label
+func _mk(id, team, pos, stance) -> UnitState:
+	var u := UnitState.new()
+	u.id = id; u.team = team; u.grid_pos = pos; u.stance = stance
+	u.hp = 20; u.max_hp = 20
+	return u
 
+# ---------- UI ----------
 func _build_ui() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	var panel := VBoxContainer.new()
-	panel.position = Vector2(20, 20)
-	panel.custom_minimum_size = Vector2(220, 0)
-	layer.add_child(panel)
+	_layer = CanvasLayer.new()
+	add_child(_layer)
+	var root := VBoxContainer.new()
+	root.position = Vector2(520, 20)
+	root.custom_minimum_size = Vector2(300, 0)
+	_layer.add_child(root)
 
-	_label = Label.new()
-	panel.add_child(_label)
+	_hud = Label.new()
+	root.add_child(_hud)
 
-	for u in state.units:
-		if u.team == 0:
-			_add_picker_for(u, panel)
+	_panel = VBoxContainer.new()
+	root.add_child(_panel)
+
+	_target_panel = VBoxContainer.new()
+	root.add_child(_target_panel)
 
 	var reveal := Button.new()
 	reveal.text = "揭晓结算"
 	reveal.pressed.connect(_on_reveal)
-	panel.add_child(reveal)
-	_btns.append(reveal)
+	root.add_child(reveal)
 
+func _refresh() -> void:
+	for c in _panel.get_children():
+		c.queue_free()
+	for c in _target_panel.get_children():
+		c.queue_free()
+
+	var phase_name: String = ["NORMAL", "ACTIVE", "ESCALATED"][Morale.phase(state.turn, tuning)]
+	_hud.text = "回合 %d | 战意 %s | 双方单位：%d/%d 存活" % [
+		state.turn, phase_name,
+		state.units.filter(func(u): return u.alive and u.team == 0).size(),
+		state.units.filter(func(u): return u.alive and u.team == 1).size(),
+	]
+
+	# 玩家方每个存活单位一个招式 picker
+	for u in state.units:
+		if u.team != 0 or not u.alive:
+			continue
+		var title := Label.new()
+		var role_name: String = ["攻", "守", "中"][Stance.role(u.stance)]
+		title.text = "【%s】HP %d/%d 破绽 %d/%d%s 架势%d(%s) %s" % [
+			String(u.id), u.hp, u.max_hp, u.opening, u.max_opening,
+			" 崩溃!" if u.guard_broken else "", u.stance, role_name,
+			"✓已指令" if pending.has(String(u.id)) else "待指令"
+		]
+		_panel.add_child(title)
+		for tech in TechniqueKit.default_kit():
+			var btn := Button.new()
+			btn.text = "%s（速%d）" % [tech.display_name, tech.speed]
+			btn.disabled = not _player_can_pick(u, tech)
+			btn.pressed.connect(_on_pick_tech.bind(u, tech))
+			_panel.add_child(btn)
+
+	# 若有单位在等目标，显示范围内敌方按钮
+	for u in state.units:
+		if u.team != 0 or not u.alive:
+			continue
+		if awaiting_target.has(String(u.id)):
+			var tech: Technique = awaiting_target[String(u.id)]
+			var lbl := Label.new()
+			lbl.text = "→ %s 选目标：" % String(u.id)
+			_target_panel.add_child(lbl)
+			for e in state.units:
+				if e.team != 0 and e.alive and RangeBand.in_range(u.grid_pos, e.grid_pos, tech.required_range, tuning):
+					var tb := Button.new()
+					tb.text = "%s (距%d)" % [String(e.id), RangeBand.distance(u.grid_pos, e.grid_pos)]
+					tb.pressed.connect(_on_pick_target.bind(u, tech, e.grid_pos))
+					_target_panel.add_child(tb)
+	view.queue_redraw()
+
+func _player_can_pick(u: UnitState, tech: Technique) -> bool:
+	if tech.type == Technique.Type.STRIKE:
+		# 至少有一个范围内敌方才允许选招（否则按钮灰）
+		for e in state.units:
+			if e.team != 0 and e.alive and RangeBand.in_range(u.grid_pos, e.grid_pos, tech.required_range, tuning):
+				return true
+		return false
+	if tech.type == Technique.Type.STANCE_SWITCH and tech.resulting_stance == u.stance:
+		return false
+	return true
+
+func _on_pick_tech(u: UnitState, tech: Technique) -> void:
+	if tech.type == Technique.Type.STRIKE:
+		awaiting_target[String(u.id)] = tech
+		pending.erase(String(u.id))
+	else:
+		pending[String(u.id)] = Resolver.Action.new(u, tech, u.grid_pos)
+		awaiting_target.erase(String(u.id))
 	_refresh()
 
-func _add_picker_for(u: UnitState, panel: VBoxContainer) -> void:
-	var name := Label.new()
-	name.text = "【%s】选招" % String(u.id)
-	panel.add_child(name)
-	for t in [_strike(), _step(1, 0), _to_stance(Stance.Id.WATER, "切·水"), _to_stance(Stance.Id.FIRE, "切·火")]:
-		var btn := Button.new()
-		btn.text = "%s（速%d）" % [t.display_name, t.speed]
-		btn.set_meta("unit", u)
-		btn.set_meta("tech", t)
-		btn.pressed.connect(_on_pick.bind(u, t))
-		panel.add_child(btn)
-		_btns.append(btn)
-
-func _on_pick(u: UnitState, t: Technique) -> void:
-	# 目标格：打击→敌方位；移动→不命中；切架势→自身位
-	var target := u.grid_pos
-	if t.type == Technique.Type.STRIKE:
-		for e in state.units:
-			if e.team != u.team and e.alive:
-				target = e.grid_pos
-				break
-	pending[String(u.id)] = Resolver.Action.new(u, t, target)
+func _on_pick_target(u: UnitState, tech: Technique, target_pos: Vector2i) -> void:
+	pending[String(u.id)] = Resolver.Action.new(u, tech, target_pos)
+	awaiting_target.erase(String(u.id))
 	_refresh()
 
 func _on_reveal() -> void:
-	# M0 热座：需要双方都选了才揭晓（敌方也由玩家点）
-	if pending.size() < 2:
-		_label.text = "双方都要选招（热座：请也给对手选一招）"
+	# 玩家方所有存活单位都需已下指令
+	var alive_player := state.units.filter(func(u): return u.team == 0 and u.alive)
+	if pending.size() < alive_player.size():
+		_hud.text = "请先为本方所有存活单位下指令（打击须点目标）"
 		return
-	var actions := pending.values()
+	# 敌方由 AI 驱动
+	var kits := {}
+	for u in state.units:
+		if u.team == 1:
+			kits[String(u.id)] = TechniqueKit.default_kit()
+	var ai_actions := AIController.choose_actions(state, 1, tuning, kits, 1000 + state.turn)
+	var all_actions: Array = pending.values() + ai_actions
 	pending.clear()
-	orch.reveal_and_resolve(actions)
+	awaiting_target.clear()
+	orch.reveal_and_resolve(all_actions)
 	orch.end_turn()
 	_refresh()
-	if state.is_over():
-		var winner := state.alive_teams()
-		_label.text = "战斗结束（存活方 team=%s）" % str(winner)
-
-func _refresh() -> void:
-	var lines: Array = []
-	for u in state.units:
-		lines.append("%s [team%d %s] HP %d/%d 破绽 %d/%d%s %s" % [
-			String(u.id), u.team, Stance.Id.keys()[u.stance],
-			u.hp, u.max_hp, u.opening, u.max_opening,
-			" 崩溃!" if u.guard_broken else "",
-			"已选" if pending.has(String(u.id)) else "待选"
-		])
-	_label.text = "\n".join(lines)
-	view.queue_redraw()
+	var oc := state.outcome(tuning)
+	if oc != BattleState.Outcome.ONGOING:
+		var msg: String = ["", "玩家胜！", "玩家败...", "平局"][oc]
+		_hud.text = "战斗结束：%s（回合 %d）" % [msg, state.turn]

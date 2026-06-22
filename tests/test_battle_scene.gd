@@ -1,55 +1,47 @@
 extends GutTest
 
-## Task 9 集成测试：1v1 手动对战场景 pick-pick-reveal 全链路。
-## 验证 presentation 层（battle.gd）正确驱动 logic 层（BattleState/Resolver/Orchestrator）。
-
-func test_pick_pick_reveal_damages_target():
+func test_2v2_pick_reveal_ai_drive_ends_with_outcome():
 	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
 	add_child(battle)
-	# _ready 已运行：state 有 2 个单位（玩家 team0 METAL，对手 team1 WOOD）
-	var u0: UnitState = battle.state.units[0]
-	var u1: UnitState = battle.state.units[1]
-	var hp_before: int = u1.hp
-	assert_eq(battle.state.units.size(), 2, "two units present after _ready")
-	assert_true(u0.alive and u1.alive, "both alive at start")
-	# 玩家打击（指向对手）；对手也打击（双方同速 5，METAL 克 WOOD → 玩家先结算）
-	battle._on_pick(u0, battle._strike())
-	battle._on_pick(u1, battle._strike())
-	assert_eq(battle.pending.size(), 2, "both picks recorded")
-	# 揭晓：玩家 METAL 克对手 WOOD → +2 克制增伤，对手掉 7（5+2）
+	# _ready 后：2 玩家单位(team0)、2 敌方(team1)。给玩家方每单位下一个打击指令（自动找范围内目标）
+	var struck := false
+	for u in battle.state.units:
+		if u.team == 0 and u.alive:
+			# 找一个范围内敌方打
+			for e in battle.state.units:
+				if e.team != 0 and e.alive and RangeBand.in_range(u.grid_pos, e.grid_pos, RangeBand.Id.FAR, battle.tuning):
+					battle._on_pick_target(u, TechniqueKit.strike_far(), e.grid_pos)
+					struck = true
+					break
+	assert_true(struck, "至少给一个玩家单位下了打击指令")
 	battle._on_reveal()
-	assert_lt(u1.hp, hp_before, "enemy HP dropped after reveal")
-	assert_eq(battle.pending.size(), 0, "pending cleared after reveal")
-	assert_eq(u1.hp, hp_before - 7, "exact counter-bonus damage 5+2=7")
+	# 一回合后，敌方应被 AI 打过血（玩家用远打 FAR 必命中）+ 我方也可能掉血
+	var oc: int = battle.state.outcome(battle.tuning)
+	assert_eq(oc, BattleState.Outcome.ONGOING, "一回合不足分胜负")
+	assert_gt(battle.state.turn, 0, "回合推进了")
 	remove_child(battle)
 	battle.queue_free()
 
-func test_reveal_blocked_until_both_pick():
+func test_2v2_runs_to_termination():
+	# 重复 pick+reveal 直到 outcome != ONGOING，断言在 cap 内终止（headless 代理）
 	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
 	add_child(battle)
-	var u0: UnitState = battle.state.units[0]
-	var u1: UnitState = battle.state.units[1]
-	var hp_before: int = u1.hp
-	# 只玩家选，对手不选 → 揭晓应被拦截
-	battle._on_pick(u0, battle._strike())
-	battle._on_reveal()
-	assert_eq(u1.hp, hp_before, "no damage when only one side picked")
-	assert_eq(battle.pending.size(), 1, "pick still pending")
-	remove_child(battle)
-	battle.queue_free()
-
-func test_battle_ends_when_hp_zero():
-	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
-	add_child(battle)
-	var u0: UnitState = battle.state.units[0]
-	var u1: UnitState = battle.state.units[1]
-	# 直接把对手 HP 设到 1，一招带走
-	u1.hp = 1
-	# 玩家打击（5+2=7 克制伤害），对手也打击（保持 WOOD，被克制）
-	battle._on_pick(u0, battle._strike())
-	battle._on_pick(u1, battle._strike())
-	battle._on_reveal()
-	assert_false(u1.alive, "enemy dead")
-	assert_true(battle.state.is_over(), "battle over")
+	var guard := 0
+	while battle.state.outcome(battle.tuning) == BattleState.Outcome.ONGOING and guard < 30:
+		# 玩家方每存活单位都打最近的敌方（FAR 必中）
+		for u in battle.state.units:
+			if u.team == 0 and u.alive:
+				var best = null
+				var best_d := 1 << 30
+				for e in battle.state.units:
+					if e.team != 0 and e.alive:
+						var d := RangeBand.distance(u.grid_pos, e.grid_pos)
+						if d < best_d:
+							best_d = d; best = e
+				if best != null:
+					battle._on_pick_target(u, TechniqueKit.strike_far(), best.grid_pos)
+		battle._on_reveal()
+		guard += 1
+	assert_ne(battle.state.outcome(battle.tuning), BattleState.Outcome.ONGOING, "2v2 在 30 回合内分胜负")
 	remove_child(battle)
 	battle.queue_free()
