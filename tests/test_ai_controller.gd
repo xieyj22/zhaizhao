@@ -120,3 +120,22 @@ func test_avoids_already_doomed_target():
 		if (act as Resolver.Action).target_pos == ea.grid_pos:
 			count_ea += 1
 	assert_lte(count_ea, 1, "ea(1HP) 至多被一个 AI 行动锁定——第二个单位不扑已注定死亡的目标")
+
+# —— 第 8 用例（property test，opus 终审 rec）：AI 永不卡死——_enumerate 跨 fixture 矩阵恒非空。
+# 锁不变量：任意 (架势 × 位置 × 敌方配置) 下，AI 至少有 1 个合法行动（STANCE_SWITCH 到非当前架势恒在）。
+# 注：这是锁定既有不变量的 property test，非新行为 TDD——直接 GREEN（无 RED 步）。
+func test_enumerate_never_empty():
+	var kit := TechniqueKit.default_kit()
+	var positions := [Vector2i(0,0), Vector2i(3,3), Vector2i(0,3), Vector2i(6,6)]
+	# 敌方配置：无敌人 / 1 邻格 / 1 远距
+	var enemy_setups := [[], [Vector2i(1,0)], [Vector2i(5,5)]]
+	for stance in Stance.ALL:
+		for pos in positions:
+			for eset in enemy_setups:
+				var u := _unit(&"ai", 1, pos, stance)
+				var units: Array = [u]
+				for epos in eset:
+					units.append(_unit(&"e", 0, epos, Stance.Id.METAL))
+				var s := _state(units)
+				var cands := AIController._enumerate(u, s, tu, kit)
+				assert_gt(cands.size(), 0, "stance=%d pos=%s enemies=%d → 至少 1 候选（切架势恒在，AI 不卡死）" % [stance, pos, eset.size()])
