@@ -1,62 +1,59 @@
 extends GutTest
 
-const MAX_TURNS := 50   # 远超 spec §2.7 的 ~8~10 回合硬上限（战意 M1 才有，这里给宽裕余量防死循环）
+const MAX_TURNS := 30   # 远超 morale_cap_turn=12，给宽裕余量防死循环
 
-func _mk_state() -> BattleState:
+func _mk_2v2() -> BattleState:
 	var s := BattleState.new()
-	var a := UnitState.new(); a.id=&"a"; a.team=0; a.grid_pos=Vector2i(1,3); a.stance=Stance.Id.METAL; a.hp=30; a.max_hp=30
-	var b := UnitState.new(); b.id=&"b"; b.team=1; b.grid_pos=Vector2i(5,3); b.stance=Stance.Id.WOOD; b.hp=30; b.max_hp=30
-	s.units = [a, b]
+	s.units = [
+		_mk(&"p0", 0, Vector2i(1,2), Stance.Id.METAL),
+		_mk(&"p1", 0, Vector2i(1,4), Stance.Id.WOOD),
+		_mk(&"e0", 1, Vector2i(5,2), Stance.Id.WOOD),
+		_mk(&"e1", 1, Vector2i(5,4), Stance.Id.METAL),
+	]
 	return s
 
-func _random_action(u: UnitState, enemy: UnitState) -> Resolver.Action:
-	var roll := randi() % 4
-	var t := Technique.new()
-	t.resulting_stance = u.stance
-	match roll:
-		0:
-			t.type = Technique.Type.STRIKE; t.base_damage=5; t.speed=5; t.opening_dealt=1
-			t.resulting_stance = Stance.Id.METAL
-			return Resolver.Action.new(u, t, enemy.grid_pos)
-		1:
-			t.type = Technique.Type.MOVE; t.speed=6; t.move_delta = Vector2i(randi_range(-1,1), 0)
-		2:
-			t.type = Technique.Type.STANCE_SWITCH; t.speed=7; t.resulting_stance = Stance.Id.WATER
-		_:
-			t.type = Technique.Type.STANCE_SWITCH; t.speed=7; t.resulting_stance = Stance.Id.FIRE
-	return Resolver.Action.new(u, t, u.grid_pos)
+func _mk(id, team, pos, stance) -> UnitState:
+	var u := UnitState.new()
+	u.id = id; u.team = team; u.grid_pos = pos; u.stance = stance
+	u.hp = 20; u.max_hp = 20
+	return u
 
-func test_random_1v1_terminates_without_infinite_loop():
-	seed(12345)
-	var s := _mk_state()
-	var orch := TurnOrchestrator.new(s, Tuning.new())
-	var turns := 0
-	while not s.is_over() and turns < MAX_TURNS:
-		var a: UnitState = s.units[0]
-		var b: UnitState = s.units[1]
-		var alive_a := a.alive
-		var alive_b := b.alive
-		var actions: Array = []
-		if alive_a and alive_b:
-			actions.append(_random_action(a, b))
-			actions.append(_random_action(b, a))
-		orch.reveal_and_resolve(actions)
-		orch.end_turn()
-		turns += 1
-	assert_true(s.is_over(), "战斗在 %d 回合内分出胜负" % MAX_TURNS)
-	assert_lt(turns, MAX_TURNS, "未触顶防死循环")
+func _player_actions(s: BattleState, t: Tuning, rng: RandomNumberGenerator) -> Array:
+	# 玩家方每存活单位：用远打(FAR 必命中)打血最少的敌方，或随机移动
+	var actions: Array = []
+	for u in s.units:
+		if u.team != 0 or not u.alive:
+			continue
+		var enemies := s.units.filter(func(e): return e.team != 0 and e.alive)
+		if enemies.is_empty():
+			continue
+		enemies.sort_custom(func(a, b): return a.hp < b.hp)   # 集火最残
+		var target: UnitState = enemies[0]
+		actions.append(Resolver.Action.new(u, TechniqueKit.strike_far(), target.grid_pos))
+	return actions
 
-func test_multiple_seeds_all_terminate():
+func test_2v2_multi_seed_terminates_with_legal_outcome():
+	var outcomes: Dictionary = {}   # outcome -> count
 	for sd in [1, 42, 777, 2026, 99999]:
-		seed(sd)
-		var s := _mk_state()
+		var rng := RandomNumberGenerator.new()
+		rng.seed = sd
+		var s := _mk_2v2()
 		var orch := TurnOrchestrator.new(s, Tuning.new())
+		var tuning := Tuning.new()
+		var kits := {}
+		for u in s.units:
+			if u.team == 1:
+				kits[String(u.id)] = TechniqueKit.default_kit()
 		var turns := 0
-		while not s.is_over() and turns < MAX_TURNS:
-			var a: UnitState = s.units[0]; var b: UnitState = s.units[1]
-			if a.alive and b.alive:
-				orch.reveal_and_resolve([_random_action(a,b), _random_action(b,a)])
+		while s.outcome(tuning) == BattleState.Outcome.ONGOING and turns < MAX_TURNS:
+			var player := _player_actions(s, tuning, rng)
+			var ai := AIController.choose_actions(s, 1, tuning, kits, sd * 1000 + turns)
+			orch.reveal_and_resolve(player + ai)
 			orch.end_turn()
 			turns += 1
-		assert_true(s.is_over(), "seed=%d 终止" % sd)
+		var oc := s.outcome(tuning)
+		assert_ne(oc, BattleState.Outcome.ONGOING, "seed=%d 在 %d 回合内分胜负" % [sd, MAX_TURNS])
 		assert_lt(turns, MAX_TURNS, "seed=%d 未触顶" % sd)
+		assert_true(oc in [BattleState.Outcome.TEAM0_WIN, BattleState.Outcome.TEAM1_WIN, BattleState.Outcome.DRAW], "seed=%d outcome 合法" % sd)
+		outcomes[oc] = outcomes.get(oc, 0) + 1
+	assert_gt(outcomes.size(), 0, "至少有一个 outcome 出现")
