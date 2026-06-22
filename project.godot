@@ -1,0 +1,11 @@
+config_version=5
+
+[application]
+
+config/name="拆招"
+config/description="同时回合制武侠战棋肉鸽"
+run/main_scene="res://src/scenes/battle/battle.tscn"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"

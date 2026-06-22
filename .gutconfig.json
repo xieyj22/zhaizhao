@@ -1,0 +1,6 @@
+{
+  "dirs": ["res://tests"],
+  "should_exit": true,
+  "hide_orphans": true,
+  "should_print_summary": true
+}
