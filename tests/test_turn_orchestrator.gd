@@ -7,7 +7,7 @@ func before_each():
 
 func _mk_state() -> BattleState:
 	var s := BattleState.new()
-	var a := UnitState.new(); a.id=&"a"; a.team=0; a.grid_pos=Vector2i(1,3); a.stance=Stance.Id.METAL
+	var a := UnitState.new(); a.id=&"a"; a.team=0; a.grid_pos=Vector2i(1,3); a.stance=Stance.Id.EARTH
 	var b := UnitState.new(); b.id=&"b"; b.team=1; b.grid_pos=Vector2i(5,3); b.stance=Stance.Id.WOOD
 	s.units = [a, b]
 	return s
@@ -49,3 +49,56 @@ func test_state_reports_over_after_kill_via_orchestrator():
 	hit.resulting_stance = Stance.Id.METAL; hit.opening_dealt = 0
 	orch.reveal_and_resolve([Resolver.Action.new(s.units[0], hit, s.units[1].grid_pos)])
 	assert_true(s.is_over())
+
+# —— M1 Task 6: end_turn 战意 + 架势角色 ——
+func _mk_with(stances: Array) -> BattleState:
+	# stances: [unit0_stance, unit1_stance, ...]，全 team 0，便于隔离测 opening 变化
+	var s := BattleState.new()
+	for i in stances.size():
+		var u := UnitState.new()
+		u.id = StringName("u%d" % i); u.team = 0
+		u.grid_pos = Vector2i(i, 0); u.stance = stances[i]
+		u.hp = 20; u.max_hp = 20; u.opening = 0
+		s.units.append(u)
+	return s
+
+func test_end_turn_neutral_accumulates_under_active_morale():
+	# turn=5（ACTIVE），EARTH(中和)：+1 战意累积，decay 被 −1 削到 0 → 净 +1
+	var s := _mk_with([Stance.Id.EARTH])
+	s.turn = 5
+	var orch := TurnOrchestrator.new(s, tu)
+	orch.end_turn()
+	assert_eq(s.units[0].opening, 1)
+
+func test_end_turn_defensive_holds_line_under_active_morale():
+	# WOOD(守势)：+1 战意 − (decay 0 + 守势奖励 1) = ±0
+	var s := _mk_with([Stance.Id.WOOD])
+	s.turn = 5
+	var orch := TurnOrchestrator.new(s, tu)
+	orch.end_turn()
+	assert_eq(s.units[0].opening, 0)
+
+func test_end_turn_offensive_self_stacks_fast_under_active_morale():
+	# METAL(攻势)：+1 自叠 +1 战意 − 0 decay = +2
+	var s := _mk_with([Stance.Id.METAL])
+	s.turn = 5
+	var orch := TurnOrchestrator.new(s, tu)
+	orch.end_turn()
+	assert_eq(s.units[0].opening, 2)
+
+func test_end_turn_no_morale_before_threshold():
+	# turn=4（NORMAL），攻势单位：只 +1 自叠（无战意），decay 正常 1 → 净 0
+	var s := _mk_with([Stance.Id.METAL])
+	s.turn = 4
+	var orch := TurnOrchestrator.new(s, tu)
+	orch.end_turn()
+	assert_eq(s.units[0].opening, 0)
+
+func test_end_turn_clears_guard_break_on_recovery():
+	var s := _mk_with([Stance.Id.EARTH])
+	s.units[0].opening = s.units[0].max_opening
+	s.units[0].guard_broken = true
+	s.turn = 4   # NORMAL：decay 1 → opening 回落到 max-1 < max → 解崩溃
+	var orch := TurnOrchestrator.new(s, tu)
+	orch.end_turn()
+	assert_false(s.units[0].guard_broken)
