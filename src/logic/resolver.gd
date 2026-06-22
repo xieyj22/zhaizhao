@@ -81,5 +81,6 @@ static func _apply_one(a: Action, state: BattleState, tuning: Tuning, result: Re
 		Technique.Type.FEINT, Technique.Type.SPECIAL:
 			# M0 占位：虚招/特技完整语义留 M2（spec §2.3）
 			result.log.append("%s 使出 %s（M0 占位）" % [String(u.id), String(t.id)])
-	# 出招后统一进入 resulting_stance（MOVE 时调用方设为原架势）
-	u.stance = t.resulting_stance
+	# 出招后统一进入 resulting_stance；MOVE 用 -1 表示保持当前架势（不赋值）
+	if t.resulting_stance >= 0:
+		u.stance = t.resulting_stance
