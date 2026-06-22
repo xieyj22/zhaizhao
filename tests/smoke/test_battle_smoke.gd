@@ -59,3 +59,4 @@ func test_multiple_seeds_all_terminate():
 			orch.end_turn()
 			turns += 1
 		assert_true(s.is_over(), "seed=%d 终止" % sd)
+		assert_lt(turns, MAX_TURNS, "seed=%d 未触顶" % sd)

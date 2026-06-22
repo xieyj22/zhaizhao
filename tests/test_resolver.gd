@@ -93,3 +93,22 @@ func test_result_carries_log():
 	var s := BattleState.new(); s.units = [a, b]
 	var res := Resolver.resolve([Resolver.Action.new(a, _strike(5,5,Stance.Id.METAL), b.grid_pos)], s, tu)
 	assert_gt(res.log.size(), 0)
+
+func test_counter_ordering_decides_same_speed_tie():
+	# A=METAL 克 B=WOOD；两人同速 STRIKE。若 A 因克制先手，B 被秒，A 不掉血。
+	# 用具体数验算：b.hp=5；A 打击 base 5 + 克制奖励 2 = 7 ≥ 5 → 击杀；
+	# B 打击 base 5（WOOD 不克 METAL，无奖励）若落到 A 身上会 -5 HP。
+	# 结果只在「A 先手」时成立：B 死、A hp 仍为 20。
+	var a := _mk(&"a", 0, Vector2i(1,1), Stance.Id.METAL)
+	var b := _mk(&"b", 1, Vector2i(2,1), Stance.Id.WOOD)
+	b.hp = 5
+	var s := BattleState.new(); s.units = [a, b]
+
+	var hit_a := _strike(5, 5, Stance.Id.METAL)   # 同速，METAL 克 WOOD
+	var hit_b := _strike(5, 5, Stance.Id.WOOD)    # 同速，WOOD 不克 METAL
+	var ra := Resolver.Action.new(a, hit_a, b.grid_pos)
+	var rb := Resolver.Action.new(b, hit_b, a.grid_pos)
+
+	Resolver.resolve([ra, rb], s, tu)
+	assert_false(b.alive, "B 被先手秒杀")
+	assert_eq(a.hp, 20, "A 因克制先手，未受伤")

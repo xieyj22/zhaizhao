@@ -8,7 +8,6 @@ var orch: TurnOrchestrator
 var view: BattleView
 
 # 谁在选、选了什么
-var picking_team: int = 0        # 0 选完轮 1，1 选完进揭晓
 var pending: Dictionary = {}     # unit.id -> Resolver.Action
 
 # 内置极简招式（M0 占位；M1 起改读 .tres）
