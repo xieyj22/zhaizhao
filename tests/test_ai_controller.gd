@@ -97,3 +97,26 @@ func test_nearest_enemy_dist_handles_units0_not_ai():
 	var sc: float = AIController._score(act, ai, s, tu, {})
 	# position 分：before=5, after=4 → (before-after)=1 > 0；朴素版会得 0（找不到敌人，before=after=INT_MAX）
 	assert_gt(sc, 0.0, "AI(team1) 朝玩家(team0) 靠近应得正分；朴素 units[0].team 版会得 0")
+
+# —— 第 7 用例：防过杀（spec §6）——
+# 两个 AI 单位都能远打两个敌人。ea hp=1 是致命目标；第一个单位拿 +10 kill_bonus 杀掉 ea，
+# 第二个单位不应再扑 ea（已被友军致命锁定），否则 +10 把已注定要死的目标顶上来 → 过杀。
+# ai_top_n=1 锁定最高分候选（消除 rng 噪声）；FAR 打击让距离非问题；只留打击消除 STANCE_SWITCH 干扰。
+func test_avoids_already_doomed_target():
+	tu.ai_top_n = 1   # 取最高分，去 rng 噪声，让"过杀 vs 不过杀"是评分之差而非抽签运气
+	var a0 := _unit(&"a0", 1, Vector2i(0,0), Stance.Id.METAL)
+	var a1 := _unit(&"a1", 1, Vector2i(0,2), Stance.Id.METAL)
+	var ea := _unit(&"ea", 0, Vector2i(5,0), Stance.Id.WOOD, 1)    # 命门：1HP
+	var eb := _unit(&"eb", 0, Vector2i(5,2), Stance.Id.WOOD, 20)  # 新鲜目标
+	var s := _state([a0, a1, ea, eb])
+	# 只给两个 AI 单位 FAR 打击（各能打 ea 与 eb 共 2 个打击候选），别留切架势等噪声
+	var strike_far_only := [TechniqueKit.strike_far()]
+	var kits := { String(a0.id): strike_far_only, String(a1.id): strike_far_only }
+	var actions := AIController.choose_actions(s, 1, tu, kits, 42)
+	assert_eq(actions.size(), 2, "两个 AI 单位各产出 1 行动")
+	# 承载性：ea 至多被一个行动锁定（防过杀的根本性质，seed 无关）
+	var count_ea := 0
+	for act in actions:
+		if (act as Resolver.Action).target_pos == ea.grid_pos:
+			count_ea += 1
+	assert_lte(count_ea, 1, "ea(1HP) 至多被一个 AI 行动锁定——第二个单位不扑已注定死亡的目标")

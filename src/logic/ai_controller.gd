@@ -95,7 +95,7 @@ static func _score(a: Resolver.Action, u: UnitState, state: BattleState, tuning:
 		+ tuning.ai_w_risk * (-risk) \
 		+ tuning.ai_w_position * position_value \
 		+ tuning.ai_w_morale * morale_agg
-	if tech.type == Technique.Type.STRIKE and target != null and _is_lethal(a, u, state, tuning):
+	if tech.type == Technique.Type.STRIKE and target != null and _is_lethal(a, u, state, tuning) and not lethal_targets.has(String(target.id)):
 		s += tuning.ai_kill_bonus
 	return s
 
