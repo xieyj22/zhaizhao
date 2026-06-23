@@ -27,3 +27,9 @@ func test_ai_weight_defaults():
 	assert_eq(t.ai_w_morale, 0.8)
 	assert_eq(t.ai_kill_bonus, 10.0)
 	assert_eq(t.ai_top_n, 3)
+
+func test_l2_defaults():
+	var t := Tuning.new()
+	assert_eq(t.l2_confidence_cap, 0.65, "预测置信度封顶 0.65（留虚招出口）")
+	assert_eq(t.l2_min_samples, 3, "样本不足 3 纯走 L1")
+	assert_eq(t.ai_w_predict, 1.0)
