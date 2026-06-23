@@ -43,6 +43,8 @@ static func _opening_band(u: UnitState) -> int:
 	return 1
 
 # ---------- 更新 ----------
+## 记一次观察。unit_id 必须等于 String(unit.id)（与 featurize 的读取 key 对齐），
+## 否则 last_type_by_unit 不匹配 → 第 4 特征(last) 恒为 -1。调用方须统一传 String(unit.id)。
 func observe(key: String, tech_type: int, unit_id: String) -> void:
 	var bucket: Dictionary = table.get(key, {})
 	bucket[tech_type] = bucket.get(tech_type, 0) + 1
@@ -75,6 +77,7 @@ func confidence(key: String, tuning: Tuning) -> float:
 	return minf(mx, tuning.l2_confidence_cap)
 
 func argmax_type(key: String) -> int:
+	# 同分时按 _BUCKETS 插入序破平（predict 返回的 Dictionary 保持该序）→ 确定性。
 	var pred := predict(key)
 	var best_t := -1
 	var best_p := -1.0
