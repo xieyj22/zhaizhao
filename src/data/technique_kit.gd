@@ -60,6 +60,15 @@ static func feint_strike(apparent: int, real_dmg := 4, real_stance := -1) -> Tec
 	t.feint_bonus_mult = 1.5; t.feint_fail_mult = 0.7
 	return t
 
+## 玩家手动虚招预设（playtest 用）：2 个诱饵架势，real 打击。
+## AI 不用（AI 走 AIController._make_feint 自动注入）；玩家 picker 追加这组。
+static func feint_presets() -> Array:
+	var f1 := feint_strike(Stance.Id.METAL, 4, -1)
+	f1.id = &"feint_lure_metal"; f1.display_name = "虚招·装金（诱敌克金）"
+	var f2 := feint_strike(Stance.Id.WATER, 4, -1)
+	f2.id = &"feint_lure_water"; f2.display_name = "虚招·装水（诱敌克水）"
+	return [f1, f2]
+
 ## M1 通用 kit：3 打击 + 4 方向移动 + 5 切架势。
 static func default_kit() -> Array:
 	var kit: Array = []

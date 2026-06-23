@@ -113,7 +113,7 @@ func _refresh() -> void:
 			"✓已指令" if pending.has(String(u.id)) else "待指令"
 		]
 		_panel.add_child(title)
-		for tech in TechniqueKit.default_kit():
+		for tech in (TechniqueKit.default_kit() + TechniqueKit.feint_presets()):
 			var btn := Button.new()
 			btn.text = "%s（速%d）" % [tech.display_name, tech.speed]
 			btn.disabled = not _player_can_pick(u, tech)
@@ -141,7 +141,7 @@ func _refresh() -> void:
 	view.queue_redraw()
 
 func _player_can_pick(u: UnitState, tech: Technique) -> bool:
-	if tech.type == Technique.Type.STRIKE:
+	if tech.type == Technique.Type.STRIKE or tech.type == Technique.Type.FEINT:
 		# 至少有一个范围内敌方才允许选招（否则按钮灰）
 		for e in state.units:
 			if e.team != 0 and e.alive and RangeBand.in_range(u.grid_pos, e.grid_pos, tech.required_range, tuning):
@@ -154,7 +154,7 @@ func _player_can_pick(u: UnitState, tech: Technique) -> bool:
 func _on_pick_tech(u: UnitState, tech: Technique) -> void:
 	if game_over:
 		return
-	if tech.type == Technique.Type.STRIKE:
+	if tech.type == Technique.Type.STRIKE or tech.type == Technique.Type.FEINT:
 		awaiting_target[String(u.id)] = tech
 		pending.erase(String(u.id))
 	else:
