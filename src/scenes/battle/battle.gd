@@ -12,6 +12,7 @@ var pending: Dictionary = {}            # unit.id(String) -> Resolver.Action（�
 var awaiting_target: Dictionary = {}    # unit.id(String) -> Technique（选招了打击，等点目标）
 
 var _layer: CanvasLayer
+var _scroll: ScrollContainer
 var _panel: VBoxContainer
 var _target_panel: VBoxContainer
 var _hud: Label
@@ -46,10 +47,18 @@ func _mk(id, team, pos, stance) -> UnitState:
 func _build_ui() -> void:
 	_layer = CanvasLayer.new()
 	add_child(_layer)
+	# 右侧面板放进 ScrollContainer：招式(24)+目标+揭晓 总高会超出窗口，需可滚动
+	_scroll = ScrollContainer.new()
+	_scroll.position = Vector2(528, 16)
+	_scroll.custom_minimum_size = Vector2(332, 760)
+	_scroll.size = Vector2(332, 760)
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_layer.add_child(_scroll)
 	var root := VBoxContainer.new()
-	root.position = Vector2(520, 20)
-	root.custom_minimum_size = Vector2(300, 0)
-	_layer.add_child(root)
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.custom_minimum_size = Vector2(316, 0)
+	_scroll.add_child(root)
 
 	_hud = Label.new()
 	root.add_child(_hud)
@@ -112,6 +121,9 @@ func _refresh() -> void:
 					tb.text = "%s (距%d)" % [String(e.id), RangeBand.distance(u.grid_pos, e.grid_pos)]
 					tb.pressed.connect(_on_pick_target.bind(u, tech, e.grid_pos))
 					_target_panel.add_child(tb)
+	# 点了打击进入"等目标"态时，自动滚到目标选择区，避免目标按钮藏在折叠下方
+	if _scroll != null and not awaiting_target.is_empty():
+		_scroll.set_deferred("scroll_vertical", 999999)
 	view.queue_redraw()
 
 func _player_can_pick(u: UnitState, tech: Technique) -> bool:

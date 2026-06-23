@@ -6,6 +6,11 @@ config/name="拆招"
 config/description="同时回合制武侠战棋肉鸽"
 run/main_scene="res://src/scenes/battle/battle.tscn"
 
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
