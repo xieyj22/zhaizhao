@@ -48,6 +48,18 @@ static func switch_to(s: int) -> Technique:
 	t.speed = 7; t.resulting_stance = s
 	return t
 
+## 伪装打击虚招（design §2.3）：apparent=诱饵架势，real 打击复用 base_damage
+static func feint_strike(apparent: int, real_dmg := 4, real_stance := -1) -> Technique:
+	var t := Technique.new()
+	t.id = &"feint_strike"; t.display_name = "虚招·诱打"
+	t.type = Technique.Type.FEINT
+	t.required_range = RangeBand.Id.FAR
+	t.base_damage = real_dmg; t.speed = 5; t.opening_dealt = 1
+	t.resulting_stance = real_stance   # -1 = 保持
+	t.apparent_stance = apparent
+	t.feint_bonus_mult = 1.5; t.feint_fail_mult = 0.7
+	return t
+
 ## M1 通用 kit：3 打击 + 4 方向移动 + 5 切架势。
 static func default_kit() -> Array:
 	var kit: Array = []

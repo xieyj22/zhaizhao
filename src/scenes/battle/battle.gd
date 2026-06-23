@@ -7,6 +7,9 @@ var state: BattleState
 var orch: TurnOrchestrator
 var tuning: Tuning
 var view: BattleView
+var player_model: PlayerModel
+var personality: AIPersonality = null   # 默认 None→用 AIPersonality.new()；可设 brain/trick
+var last_read_events: Array = []
 
 var pending: Dictionary = {}            # unit.id(String) -> Resolver.Action（玩家已下指令）
 var awaiting_target: Dictionary = {}    # unit.id(String) -> Technique（选招了打击，等点目标）
@@ -28,7 +31,10 @@ func _ready() -> void:
 		_mk(&"敌甲", 1, Vector2i(5, 2), Stance.Id.WOOD),
 		_mk(&"敌乙", 1, Vector2i(5, 4), Stance.Id.METAL),
 	]
-	orch = TurnOrchestrator.new(state, tuning)
+	player_model = PlayerModel.new()
+	if personality == null:
+		personality = AIPersonality.brain()   # 默认智将（最显 L2 效果）
+	orch = TurnOrchestrator.new(state, tuning, player_model, 1)
 
 	view = BattleView.new()
 	view.cell = CELL; view.grid_size = GRID; view.state = state
@@ -86,6 +92,12 @@ func _refresh() -> void:
 		state.units.filter(func(u): return u.alive and u.team == 0).size(),
 		state.units.filter(func(u): return u.alive and u.team == 1).size(),
 	]
+	var read_line := ""
+	for e in last_read_events:
+		if e.hit:
+			read_line += "  ▶ %s 读中目标(predict=%s)！" % [personality.display_name if personality != null else "敌方", Technique.Type.keys()[e.predicted]]
+	if read_line != "":
+		_hud.text += "\n" + read_line
 
 	# 玩家方每个存活单位一个招式 picker
 	for u in state.units:
@@ -162,11 +174,12 @@ func _on_reveal() -> void:
 	for u in state.units:
 		if u.team == 1:
 			kits[String(u.id)] = TechniqueKit.default_kit()
-	var ai_actions := AIController.choose_actions(state, 1, tuning, kits, 1000 + state.turn)
-	var all_actions: Array = pending.values() + ai_actions
+	var ai_out := AIController.choose_actions(state, 1, tuning, kits, 1000 + state.turn, player_model, personality)
+	var all_actions: Array = pending.values() + ai_out.actions
 	pending.clear()
 	awaiting_target.clear()
 	orch.reveal_and_resolve(all_actions)
+	last_read_events = TurnOrchestrator.compute_read_events(ai_out.predictions, all_actions)
 	orch.end_turn()
 	_refresh()
 	var oc := state.outcome(tuning)
