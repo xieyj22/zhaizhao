@@ -38,8 +38,10 @@ func test_2v2_multi_seed_terminates_with_legal_outcome():
 		var rng := RandomNumberGenerator.new()
 		rng.seed = sd
 		var s := _mk_2v2()
-		var orch := TurnOrchestrator.new(s, Tuning.new())
 		var tuning := Tuning.new()
+		var pm := PlayerModel.new()
+		var pers := AIPersonality.brain()
+		var orch := TurnOrchestrator.new(s, tuning, pm, 1)
 		var kits := {}
 		for u in s.units:
 			if u.team == 1:
@@ -47,8 +49,8 @@ func test_2v2_multi_seed_terminates_with_legal_outcome():
 		var turns := 0
 		while s.outcome(tuning) == BattleState.Outcome.ONGOING and turns < MAX_TURNS:
 			var player := _player_actions(s, tuning, rng)
-			var ai := AIController.choose_actions(s, 1, tuning, kits, sd * 1000 + turns)
-			orch.reveal_and_resolve(player + ai)
+			var ai_out := AIController.choose_actions(s, 1, tuning, kits, sd * 1000 + turns, pm, pers)
+			orch.reveal_and_resolve(player + ai_out.actions)
 			orch.end_turn()
 			turns += 1
 		var oc := s.outcome(tuning)

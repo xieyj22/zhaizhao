@@ -32,3 +32,8 @@ extends Resource
 @export var ai_w_morale: float = 0.8
 @export var ai_kill_bonus: float = 10.0
 @export var ai_top_n: int = 3
+
+## —— M2: L2 玩家建模（spec §5；起步手挑特征，命门）——
+@export var ai_w_predict: float = 3.0           # L2 反制维度权重（被 AIPersonality.w_predict_mul 缩放）；3.0 让 brain 的预测反制能压过 L1 opening 价值
+@export var l2_min_samples: int = 3             # 样本不足此数 → predict 贡献归零，纯走 L1
+@export var l2_confidence_cap: float = 0.65     # 预测最大概率封顶 → 永远 ≥35% 留给虚招反制出口（防开挂感）
