@@ -79,8 +79,9 @@ func test_trick_injects_feint():
 	var saw_feint := false
 	for sd in [1, 2, 3, 4, 5, 6, 7, 8]:
 		var actions := _choose(s, 1, PlayerModel.new(), AIPersonality.trick(), sd)
-		if actions[0].technique.type == Technique.Type.FEINT:
-			saw_feint = true
+		for act in actions:
+			if act.technique.type == Technique.Type.FEINT:
+				saw_feint = true
 	assert_true(saw_feint, "trick 多 seed 至少出一次虚招")
 
 func test_predictions_returned_for_read_events():

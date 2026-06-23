@@ -94,17 +94,21 @@ static func _score(a: Resolver.Action, u: UnitState, state: BattleState, tuning:
 			var pred := player_model.argmax_type(key)
 			match pred:
 				Technique.Type.STRIKE:
-					# 预测对方打击 → 切守势是经典反制：bonus 以「避开伤害」估值，
-					# 与 opening_value 同量级（~5-7），这样 predict 维度能真正压过裸伤害。
+					# 预测对方打击 → 切守势反制（design §2.2 spec 值 +2.0）
+					# 维度权重靠 Tuning.ai_w_predict × AIPersonality.w_predict_mul 缩放
 					if tech.type == Technique.Type.STANCE_SWITCH and tech.resulting_stance >= 0 and Stance.role(tech.resulting_stance) == Stance.Role.DEFENSIVE:
-						predict_value += 5.0
-					# 快打击也能抢先手压制对方的打击
+						predict_value += 2.0
+					# 快打击抢先手压制对方的打击（spec +0.8）
 					elif tech.type == Technique.Type.STRIKE and tech.speed >= 5:
 						predict_value += 0.8
 				Technique.Type.STANCE_SWITCH:
-					# 预测对方龟 → 打击破龟
+					# 预测对方龟 → 打击破龟（spec +1.5）
 					if tech.type == Technique.Type.STRIKE:
-						predict_value += 3.0
+						predict_value += 1.5
+				Technique.Type.MOVE:
+					# 预测对方走位 → 打击抓位移（spec +0.5）
+					if tech.type == Technique.Type.STRIKE:
+						predict_value += 0.5
 				Technique.Type.FEINT:
 					predict_value -= 1.0
 
