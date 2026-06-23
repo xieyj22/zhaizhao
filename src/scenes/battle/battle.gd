@@ -186,7 +186,21 @@ func _on_reveal() -> void:
 	var all_actions: Array = pending.values() + ai_out.actions
 	pending.clear()
 	awaiting_target.clear()
+	# 记 pre hp/guard（juice：伤害飘字+震屏用，reveal 前）
+	var pre_hp: Dictionary = {}
+	var pre_guard: Dictionary = {}
+	for u in state.units:
+		pre_hp[String(u.id)] = u.hp
+		pre_guard[String(u.id)] = u.guard_broken
 	orch.reveal_and_resolve(all_actions)
+	# juice：命中飘字（pre_guard=true=挨打前已崩溃→翻倍=critical=黄大字+震；致命=大震）
+	for u in state.units:
+		var dmg: int = int(pre_hp[String(u.id)]) - u.hp
+		if dmg > 0:
+			view.spawn_floater(u.grid_pos, "-%d" % dmg, bool(pre_guard[String(u.id)]))
+			view.flash_at(u.grid_pos)
+			if u.hp <= 0:
+				view.add_shake(8.0)
 	last_read_events = TurnOrchestrator.compute_read_events(ai_out.predictions, all_actions)
 	orch.end_turn()
 	_refresh()
