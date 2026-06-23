@@ -66,3 +66,14 @@ func test_2v2_with_brain_personality_runs_to_outcome():
 	assert_ne(battle.state.outcome(battle.tuning), BattleState.Outcome.ONGOING, "带 brain 性格的 2v2 在 30 回合内分胜负")
 	assert_gt(battle.player_model.total, 0)
 	remove_child(battle); battle.queue_free()
+
+func test_game_over_locks_further_reveals():
+	# 回归：验收 bug「玩家死后回合一直继续」——_on_reveal 在 game_over 后必须 no-op
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	battle.game_over = true   # 模拟战斗已结束
+	var turn_before: int = battle.state.turn
+	battle._on_reveal()       # 应被 game_over guard 挡住，什么都不做
+	assert_eq(battle.state.turn, turn_before, "game_over 后揭晓不推进回合")
+	assert_true(battle.game_over)
+	remove_child(battle); battle.queue_free()

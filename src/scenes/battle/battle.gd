@@ -13,12 +13,14 @@ var last_read_events: Array = []
 
 var pending: Dictionary = {}            # unit.id(String) -> Resolver.Action（玩家已下指令）
 var awaiting_target: Dictionary = {}    # unit.id(String) -> Technique（选招了打击，等点目标）
+var game_over: bool = false             # 战斗结束锁：outcome 非 ONGOING 后阻止继续揭晓/选招
 
 var _layer: CanvasLayer
 var _scroll: ScrollContainer
 var _panel: VBoxContainer
 var _target_panel: VBoxContainer
 var _hud: Label
+var _reveal_button: Button
 
 func _ready() -> void:
 	tuning = Tuning.new()
@@ -75,10 +77,10 @@ func _build_ui() -> void:
 	_target_panel = VBoxContainer.new()
 	root.add_child(_target_panel)
 
-	var reveal := Button.new()
-	reveal.text = "揭晓结算"
-	reveal.pressed.connect(_on_reveal)
-	root.add_child(reveal)
+	_reveal_button = Button.new()
+	_reveal_button.text = "揭晓结算"
+	_reveal_button.pressed.connect(_on_reveal)
+	root.add_child(_reveal_button)
 
 func _refresh() -> void:
 	for c in _panel.get_children():
@@ -150,6 +152,8 @@ func _player_can_pick(u: UnitState, tech: Technique) -> bool:
 	return true
 
 func _on_pick_tech(u: UnitState, tech: Technique) -> void:
+	if game_over:
+		return
 	if tech.type == Technique.Type.STRIKE:
 		awaiting_target[String(u.id)] = tech
 		pending.erase(String(u.id))
@@ -159,11 +163,15 @@ func _on_pick_tech(u: UnitState, tech: Technique) -> void:
 	_refresh()
 
 func _on_pick_target(u: UnitState, tech: Technique, target_pos: Vector2i) -> void:
+	if game_over:
+		return
 	pending[String(u.id)] = Resolver.Action.new(u, tech, target_pos)
 	awaiting_target.erase(String(u.id))
 	_refresh()
 
 func _on_reveal() -> void:
+	if game_over:
+		return   # 战斗已结束，不再推进
 	# 玩家方所有存活单位都需已下指令
 	var alive_player := state.units.filter(func(u): return u.team == 0 and u.alive)
 	if pending.size() < alive_player.size():
@@ -184,5 +192,8 @@ func _on_reveal() -> void:
 	_refresh()
 	var oc := state.outcome(tuning)
 	if oc != BattleState.Outcome.ONGOING:
+		game_over = true
+		_reveal_button.disabled = true
+		_reveal_button.text = "战斗结束 — 关闭窗口重玩"
 		var msg: String = ["", "玩家胜！", "玩家败...", "平局"][oc]
 		_hud.text = "战斗结束：%s（回合 %d）" % [msg, state.turn]
