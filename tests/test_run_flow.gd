@@ -34,3 +34,32 @@ func test_enter_node_updates_current_and_log():
 	RunFlow.enter_node(run, nxt[0])
 	assert_eq(run.current_node_id, nxt[0])
 	assert_true(run.chapter_progress[1]["nodes_visited"].has(nxt[0]), "记录已访问")
+
+# —— 回归（bug: init_run 后 current_node_id="" 进 map 无节点可点）——
+func _first_node_of_layer(run: RunState, layer: int) -> String:
+	var m: Dictionary = run.chapter_maps[run.current_chapter]
+	for id in m["nodes"]:
+		if int(m["nodes"][id]["layer"]) == layer:
+			return id
+	return ""
+
+func test_place_at_chapter_start_fixes_unreachable_bug():
+	# 复现：fresh init_run 的 current_node_id="" → 进图前 L1 节点不可 advance（bug 症状）
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	assert_eq(run.current_node_id, "", "fresh run current_node_id 空（在 hub）")
+	var l1 := _first_node_of_layer(run, 1)
+	assert_false(RunFlow.can_advance_node(run, l1), "未定位起点时 L1 节点不可 advance（bug）")
+	# 修复：place_at_chapter_start 定位到 L0 起点
+	RunFlow.place_at_chapter_start(run)
+	var m: Dictionary = run.chapter_maps[run.current_chapter]
+	assert_eq(int(m["nodes"][run.current_node_id]["layer"]), 0, "定位到 L0 起点")
+	assert_true(RunFlow.can_advance_node(run, l1), "定位后 L1 节点可 advance（修复）")
+
+func test_place_at_chapter_start_idempotent():
+	# 已在某节点时（如战斗后返回 map）→ 幂等不动
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	RunFlow.place_at_chapter_start(run)
+	var first: String = run.current_node_id
+	assert_ne(first, "")
+	RunFlow.place_at_chapter_start(run)
+	assert_eq(run.current_node_id, first, "已在节点时幂等不改")

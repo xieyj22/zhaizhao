@@ -36,3 +36,17 @@ static func on_boss_defeated(run: RunState) -> void:
 	)
 	cp["boss_defeated"] = true
 	run.chapter_progress[run.current_chapter] = cp
+
+## 进入章节图：若 current_node_id 为空（在 hub），定位到当前章 L0 起点节点。
+## 幂等——已在某节点时（如战斗后返回 map）不动。map 场景 _ready 调用。
+## 修 bug：init_run 设 current_node_id="" 进 map 后 can_advance_node 全 false（无边 from=""）→ 节点全 disabled。
+static func place_at_chapter_start(run: RunState) -> void:
+	if run.current_node_id != "":
+		return
+	if not run.chapter_maps.has(run.current_chapter):
+		return
+	var m: Dictionary = run.chapter_maps[run.current_chapter]
+	for id in m["nodes"]:
+		if int(m["nodes"][id].get("layer", -1)) == 0:
+			run.current_node_id = String(id)
+			return

@@ -3,6 +3,9 @@ extends Node2D
 var _layer: CanvasLayer
 
 func _ready() -> void:
+	# 修 bug：进图时若在 hub（current_node_id 空），定位到当前章 L0 起点，否则无节点可点。
+	if MetaSession.current_run != null:
+		RunFlow.place_at_chapter_start(MetaSession.current_run)
 	_build_ui()
 
 func _build_ui() -> void:
