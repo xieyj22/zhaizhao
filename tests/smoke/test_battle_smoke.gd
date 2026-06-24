@@ -97,6 +97,33 @@ func test_chapter1_full_run_meta_persists():
 	# 原 meta 不被污染（commit 是纯函数深拷贝）
 	assert_eq(meta.meta_runs_completed, 0, "原 meta 不变（commit 深拷贝）")
 
+# --- M3.5: 多 modifier replay-variety smoke --------------------------------
+
+func test_multi_modifier_run_varies():
+	# 几个 seed roll 出不同 modifier，验证 init_run + 注入跑通、不同 seed 不同 modifier_state
+	var seeds := [11, 22, 33, 44, 55]
+	var states: Array = []
+	for s in seeds:
+		var run := RunFactory.init_run(MetaState.new_first_play(), s)
+		assert_true(run.modifier_state.size() > 0, "seed %d roll 出 modifier" % s)
+		# 构造一场战斗不崩（modifier 注入 + enemy pool 都接）
+		var node_cfg: Dictionary = {"node_type":"duel","risk":0}
+		var bs := BattleBuilder.build(run, node_cfg)
+		assert_true(bs.units.size() >= 2, "seed %d 战斗构造含玩家+敌" % s)
+		states.append(JSON.stringify(run.modifier_state))
+	# 至少两个 seed 的 modifier_state 不同（variety）
+	var unique: Dictionary = {}
+	for st in states:
+		unique[st] = true
+	assert_true(unique.size() >= 2, "多 seed 产出 >=2 种不同 modifier 组合")
+
+func test_modifier_battlestate_reflects_modifier():
+	# 血煞弥漫 modifier → battle_builder 注入 chaos
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.modifier_state = {"hazard_baseline":{"chaos":true}}
+	var bs := BattleBuilder.build(run, {"enemies":[]})
+	assert_eq(bs.hazard_modifiers.get("chaos", false), true, "血煞弥漫 → chaos 注入 BattleState")
+
 func _walk_to_boss(m: Dictionary) -> String:
 	# 沿 reachable_next[0] 从 L0 走 6 步到 L6（boss 前层）任一节点
 	var start := ""

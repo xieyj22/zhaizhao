@@ -25,6 +25,12 @@ func _build_ui() -> void:
 			btn.position = Vector2(x, 40 + (by_layer[l] as Array).find(id) * 50)
 			btn.text = "%s\n%s" % [id, ty]
 			btn.custom_minimum_size = Vector2(100, 40)
+			# —— M3.5: 险地节点高亮 + reward_tier 标注（MG2 在险地打 t3_chance 标）——
+			if ty == "hazard":
+				btn.modulate = Color(1.0, 0.5, 0.5)   # 红色高亮
+				var rt: String = m["nodes"][id].get("reward_tier", "normal")
+				if rt == "t3_chance":
+					btn.text += " ★高回报"
 			if id == run.current_node_id:
 				btn.text += " ★"
 			if RunFlow.can_advance_node(run, id):
@@ -45,6 +51,11 @@ func _on_enter_node(node_id: String) -> void:
 			MetaSession.current_node_cfg = _node_cfg_for(ty, node_id)
 			get_tree().change_scene_to_file("res://src/scenes/battle/battle.tscn")
 		"visit","escort":
+			# —— M3.5: 镖局(escort)信用消费 ——
+			# M4 镖局实装时此处扣 tuning.credit_service_cost × (1/credit_mult)：
+			#   var cost := int(round(float(Tuning.new().credit_service_cost) / float(run.modifier_state.get("credit_mult", 1.0))))
+			#   run.jianghu_credit = max(0, run.jianghu_credit - cost)
+			# 现 escort 为占位（无服务菜单），仅打 unlock reward，信用消费留 M4 镖局实装接。
 			var reward: Variant = UnlockRules.roll_unlock_reward(MetaSession.meta_state.meta_unlocked_pool, ty, _node_cfg_for(ty,node_id), run.rng_seed)
 			if reward != null and not run.unlocked_techniques.has(reward):
 				run.unlocked_techniques.append(reward)
