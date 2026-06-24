@@ -2,8 +2,8 @@ extends GutTest
 
 ## Task MG: seeded DAG 节点图生成器（T4 §1）。
 
-func _gen(seed: int, chapter := 1) -> Dictionary:
-	return MapGenerator.generate_map(seed, chapter)
+func _gen(p_seed: int, chapter: int, hazard_delta: int = 0) -> Dictionary:
+	return MapGenerator.generate_map(p_seed, chapter, hazard_delta)
 
 func test_determinism_same_seed_same_map():
 	var a := _gen(42, 1)
@@ -119,3 +119,45 @@ func test_invariants_hold_across_many_seeds():
 			var start := ""
 			for id in m["nodes"]: if m["nodes"][id]["layer"]==0: start=id; break
 			assert_true(MapGenerator.reachable_next(m, start).size() >= 2, "seed %d ch %d 起点分支<2" % [seed,ch])
+
+
+# --- Task MG2: hazard_delta + reward_tier + 险径 --------------------------
+
+func test_hazard_nodes_have_reward_tier():
+	var m := _gen(7, 1)
+	for id in m["nodes"]:
+		if m["nodes"][id]["type"] == "hazard":
+			var rt: String = m["nodes"][id].get("reward_tier", "")
+			assert_true(rt == "normal" or rt == "t3_chance", "险地节点 %s 有 reward_tier" % id)
+
+func test_at_least_one_peril_path():
+	var m := _gen(7, 1)
+	var hazards_by_layer := {}
+	for id in m["nodes"]:
+		if m["nodes"][id]["type"] == "hazard":
+			var l: int = m["nodes"][id]["layer"]
+			hazards_by_layer[l] = hazards_by_layer.get(l, [])
+			hazards_by_layer[l].append(id)
+	var layers_with_hazard: Array = hazards_by_layer.keys()
+	layers_with_hazard.sort()
+	var has_peril := false
+	for i in range(layers_with_hazard.size() - 1):
+		if layers_with_hazard[i + 1] - layers_with_hazard[i] == 1:
+			has_peril = true
+			break
+	assert_true(has_peril, "至少一条险径（相邻层都有险地）")
+
+func test_hazard_delta_increases_count():
+	var base: int = _hazard_count(_gen(7, 1, 0))
+	var more: int = _hazard_count(_gen(7, 1, 2))
+	assert_gt(more, base, "hazard_delta=2 → 险地更多")
+
+func test_hazard_delta_zero_unchanged():
+	assert_eq(_hazard_count(_gen(7, 1, 0)), _hazard_count(_gen(7, 1)))
+
+func _hazard_count(m: Dictionary) -> int:
+	var n := 0
+	for id in m["nodes"]:
+		if m["nodes"][id]["type"] == "hazard":
+			n += 1
+	return n
