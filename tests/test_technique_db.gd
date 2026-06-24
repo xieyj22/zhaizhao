@@ -40,3 +40,39 @@ func test_db_tier_filter():
 func test_data_count():
 	# 14 通用 + 16 招牌 + 2 隐藏 = 32 实例
 	assert_eq(TechniqueData.all_techniques().size(), 32, "14+16+2=32（通用14含4步法+5切势+3打击+2虚招预设；招牌16；隐藏2）")
+
+func test_signature_numerics_match_spec():
+	# T3 §3 authoritative values (guard against data drift)
+	var lianci := TechniqueDB.find(&"chifeng_lianci")
+	assert_eq(lianci.base_damage, 6); assert_eq(lianci.speed, 5); assert_eq(lianci.opening_dealt, 2)
+	var yingzhao := TechniqueDB.find(&"jingzhao_yingzhao")
+	assert_eq(yingzhao.speed, 7)
+	var lagen := TechniqueDB.find(&"pangen_lagen")
+	assert_eq(lagen.speed, 7)
+	var liaoyuan := TechniqueDB.find(&"lieyan_liaoyuan")
+	assert_eq(liaoyuan.base_damage, 7); assert_eq(liaoyuan.opening_dealt, 2)
+	var huoqi := TechniqueDB.find(&"lieyan_huoqi")   # id corrected from lieyan_pokong
+	assert_eq(huoqi.display_name, "烈焰·破空"); assert_eq(huoqi.speed, 6); assert_eq(huoqi.required_range, 2)
+	var xuedao := TechniqueDB.find(&"xueyi_xuedao")
+	assert_eq(xuedao.base_damage, 7); assert_eq(xuedao.speed, 5); assert_eq(xuedao.opening_dealt, 2)
+
+func test_feint_signature_has_separate_apparent():
+	var zhuangtu := TechniqueDB.find(&"huazong_zhuangtu")
+	assert_eq(zhuangtu.resulting_stance, -1, "feint resulting=-1 保持")
+	assert_eq(zhuangtu.apparent_stance, Stance.Id.EARTH, "apparent=厚土诱饵")
+	assert_eq(zhuangtu.required_range, 2, "装土是 FAR")
+	var zhuanghuo := TechniqueDB.find(&"huazong_zhuanghuo")
+	assert_eq(zhuanghuo.base_damage, 5, "装火 real dmg 5")
+	assert_eq(zhuanghuo.apparent_stance, Stance.Id.FIRE)
+	var xz := TechniqueDB.find(&"xueyi_zhuangjin")
+	assert_eq(xz.base_damage, 5); assert_eq(xz.apparent_stance, Stance.Id.METAL)
+
+func test_move_signature_has_delta():
+	var yajin := TechniqueDB.find(&"chifeng_yajin")
+	assert_eq(yajin.move_delta, Vector2i(1, 0))
+	var xieli := TechniqueDB.find(&"tingchao_xieli")
+	assert_eq(xieli.move_delta, Vector2i(-1, 0))
+
+func test_lieyan_pokong_gone():
+	# 旧错误 id 不应存在
+	assert_null(TechniqueDB.find(&"lieyan_pokong"))
