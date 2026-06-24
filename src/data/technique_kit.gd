@@ -6,7 +6,7 @@ extends RefCounted
 
 static func strike_close() -> Technique:
 	var t := Technique.new()
-	t.id = &"strike_close"; t.display_name = "近打"
+	t.id = &"tongshi_jinda"; t.display_name = "通式·近打"
 	t.type = Technique.Type.STRIKE
 	t.required_range = RangeBand.Id.CLOSE
 	t.base_damage = 5; t.speed = 5; t.opening_dealt = 1
@@ -15,7 +15,7 @@ static func strike_close() -> Technique:
 
 static func strike_mid() -> Technique:
 	var t := Technique.new()
-	t.id = &"strike_mid"; t.display_name = "中打"
+	t.id = &"tongshi_zhongda"; t.display_name = "通式·中打"
 	t.type = Technique.Type.STRIKE
 	t.required_range = RangeBand.Id.MID
 	t.base_damage = 4; t.speed = 5; t.opening_dealt = 1
@@ -24,7 +24,7 @@ static func strike_mid() -> Technique:
 
 static func strike_far() -> Technique:
 	var t := Technique.new()
-	t.id = &"strike_far"; t.display_name = "远打"
+	t.id = &"tongshi_yuanda"; t.display_name = "通式·远打"
 	t.type = Technique.Type.STRIKE
 	t.required_range = RangeBand.Id.FAR
 	t.base_damage = 3; t.speed = 5; t.opening_dealt = 1
@@ -33,7 +33,7 @@ static func strike_far() -> Technique:
 
 static func step(dx: int, dy: int) -> Technique:
 	var t := Technique.new()
-	t.id = &"step"; t.display_name = "进退步"
+	t.id = _step_id_for(dx, dy); t.display_name = "通式·步法"
 	t.type = Technique.Type.MOVE
 	t.required_range = 0
 	t.speed = 6; t.move_delta = Vector2i(dx, dy)
@@ -42,11 +42,25 @@ static func step(dx: int, dy: int) -> Technique:
 
 static func switch_to(s: int) -> Technique:
 	var t := Technique.new()
-	t.id = StringName("switch_%d" % s); t.display_name = "切架势"
+	t.id = _switch_id_for(s); t.display_name = "通式·切势"
 	t.type = Technique.Type.STANCE_SWITCH
 	t.required_range = 0
 	t.speed = 7; t.resulting_stance = s
 	return t
+
+## —— R12 id 迁移（M3；T3 §5.1）—— 工厂内部 id 改新正式 id，签名/数值不变。
+static func _step_id_for(dx: int, dy: int) -> StringName:
+	if dx > 0: return &"tongshi_jinbu"
+	if dx < 0: return &"tongshi_tuibu"
+	if dy > 0: return &"tongshi_cebu_shang"
+	return &"tongshi_cebu_xia"
+
+const _SWITCH_IDS := [
+	&"tongshi_zhuan_ruijin", &"tongshi_zhuan_pangen", &"tongshi_zhuan_houtu",
+	&"tongshi_zhuan_liushui", &"tongshi_zhuan_liehuo",
+]
+static func _switch_id_for(s: int) -> StringName:
+	return _SWITCH_IDS[clampi(s, 0, 4)]
 
 ## 伪装打击虚招（design §2.3）：apparent=诱饵架势，real 打击复用 base_damage
 static func feint_strike(apparent: int, real_dmg := 4, real_stance := -1) -> Technique:
@@ -64,9 +78,9 @@ static func feint_strike(apparent: int, real_dmg := 4, real_stance := -1) -> Tec
 ## AI 不用（AI 走 AIController._make_feint 自动注入）；玩家 picker 追加这组。
 static func feint_presets() -> Array:
 	var f1 := feint_strike(Stance.Id.METAL, 4, -1)
-	f1.id = &"feint_lure_metal"; f1.display_name = "虚招·装金（诱敌克金）"
+	f1.id = &"tongshi_zhuangjin"; f1.display_name = "通式·装金"
 	var f2 := feint_strike(Stance.Id.WATER, 4, -1)
-	f2.id = &"feint_lure_water"; f2.display_name = "虚招·装水（诱敌克水）"
+	f2.id = &"tongshi_zhuangshui"; f2.display_name = "通式·装水"
 	return [f1, f2]
 
 ## M1 通用 kit：3 打击 + 4 方向移动 + 5 切架势。
