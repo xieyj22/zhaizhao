@@ -19,3 +19,15 @@ func test_faction_personality_tendency():
 	assert_eq(FactionData.tendency("F2"), "brute", "赤锋军门 brute")
 	assert_eq(FactionData.tendency("F4"), "brain", "听潮书院 brain")
 	assert_eq(FactionData.tendency("F6"), "trick", "幻踪门 trick")
+
+func test_all_tendencies_match_design_doc():
+	# docs/design/02-factions.md §性格映射 self-check (lines 258-262)
+	assert_eq(FactionData.tendency("F1"), "brain")
+	assert_eq(FactionData.tendency("F2"), "brute")
+	assert_eq(FactionData.tendency("F3"), "brain")
+	assert_eq(FactionData.tendency("F4"), "brain")
+	assert_eq(FactionData.tendency("F5"), "brute")
+	assert_eq(FactionData.tendency("F6"), "trick")
+	assert_eq(FactionData.tendency("F7"), "trick", "夜枭镖局 = trick（老油条诡，非 brain）")
+	# F8 血衣教 = 混合（M3+ 扩展）；tendency() 简化为 brute（七高手 brute/brain/trick 分脑，M3 取主战 brute）
+	assert_eq(FactionData.tendency("F8"), "brute")

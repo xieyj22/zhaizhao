@@ -10,7 +10,7 @@ const NAMES := {
 # 性格倾向（T2 §性格映射）：brain/brute/trick
 const _TENDENCY := {
 	"F1":"brain", "F2":"brute", "F3":"brain", "F4":"brain",
-	"F5":"brute", "F6":"trick", "F7":"brain", "F8":"brute",
+	"F5":"brute", "F6":"trick", "F7":"trick", "F8":"brute",
 }
 # 各派招牌招 id（队友 kit 用，T3 §5.2；与 TechniqueData 的 id 一致）
 const SIGNATURE_KITS := {
