@@ -9,10 +9,20 @@ static func build(run: RunState, node_cfg: Dictionary) -> BattleState:
 	var units: Array = []
 	for pd in run.player_roster:
 		units.append(_unit_from_roster(pd, run))
-	for ed in node_cfg.get("enemies", []):
+	# 敌方：node_cfg.enemies 优先（兼容旧测试），否则从 enemy_pool.pick 抽
+	var enemies: Array = node_cfg.get("enemies", [])
+	if enemies.is_empty() and node_cfg.has("node_type"):
+		var ec: Dictionary = EnemyPool.pick(String(node_cfg["node_type"]), int(node_cfg.get("risk", 0)), run.rng_seed)
+		enemies = ec["enemies"]
+	for ed in enemies:
 		units.append(_unit_from_enemy(ed))
 	s.units = units
-	s.hazard_modifiers = node_cfg.get("hazard", {})
+	# hazard：node_cfg.hazard ∪ modifier hazard_baseline（深合并）
+	var hz: Dictionary = node_cfg.get("hazard", {})
+	var baseline: Dictionary = run.modifier_state.get("hazard_baseline", {})
+	for k in baseline:
+		hz[k] = baseline[k]
+	s.hazard_modifiers = hz
 	return s
 
 static func _unit_from_roster(pd: Dictionary, run: RunState) -> UnitState:
@@ -32,14 +42,46 @@ static func _unit_from_enemy(ed: Dictionary) -> UnitState:
 	u.kit = _build_kit(ed.get("kit",[]), RunState.new())   # 敌方无 variant（run 空）
 	return u
 
-## kit_ids -> Technique[]（查表 find + variant 覆盖）。未知 id 跳过（find 返回 null）。
+## kit_ids -> Technique[]（查表 find + variant 覆盖 + modifier 注入）。未知 id 跳过（find 返回 null）。
+## M3.5：modifier 按招 resulting_stance 所属势施加（kit 构造期不知单位架势，故按招势）。
 static func _build_kit(kit_ids: Array, run: RunState) -> Array:
 	var kit: Array = []
+	var ms: Dictionary = run.modifier_state
+	var dmg_bonus: Dictionary = ms.get("kit_stance_damage_bonus", {})
+	var spd_bonus: Dictionary = ms.get("kit_stance_speed_bonus", {})
+	var feint_delta: float = float(ms.get("kit_feint_bonus_delta", 0.0))
 	for tid in kit_ids:
 		var t: Technique = TechniqueDB.find(StringName(tid))
 		if t == null:
 			continue   # 未知 id 跳过（不崩）
 		if run.technique_variants.has(tid):
 			t = Technique.apply_variant(t, StringName(run.technique_variants[tid]))
+		# —— M3.5: modifier 注入（按招 resulting_stance 所属势）——
+		t = _apply_modifier_to_tech(t, dmg_bonus, spd_bonus, feint_delta)
 		kit.append(t)
 	return kit
+
+## modifier 注入到单招：dmg/spd bonus 按 resulting_stance、feint delta 仅 FEINT。
+## 空 modifier（dmg_bonus/spd_bonus 全 {}、feint_delta 0）→ 直接返回原招（边界守护，与 M3 一致）。
+static func _apply_modifier_to_tech(t: Technique, dmg_bonus: Dictionary, spd_bonus: Dictionary, feint_delta: float) -> Technique:
+	if dmg_bonus.is_empty() and spd_bonus.is_empty() and feint_delta == 0.0:
+		return t
+	var out: Technique = t.duplicate()
+	var stance_name: String = _stance_name(out.resulting_stance)
+	if stance_name != "" and dmg_bonus.has(stance_name):
+		out.base_damage = out.base_damage + int(dmg_bonus[stance_name])
+	if stance_name != "" and spd_bonus.has(stance_name):
+		out.speed = out.speed + int(spd_bonus[stance_name])
+	if out.type == Technique.Type.FEINT and feint_delta != 0.0:
+		out.feint_bonus_mult = out.feint_bonus_mult + feint_delta
+	return out
+
+## Stance.Id -> modifier_state 键名（"METAL"/...）；-1（MOVE 保持）无 stance bonus。
+static func _stance_name(stance_id: int) -> String:
+	match stance_id:
+		Stance.Id.METAL: return "METAL"
+		Stance.Id.WOOD: return "WOOD"
+		Stance.Id.EARTH: return "EARTH"
+		Stance.Id.WATER: return "WATER"
+		Stance.Id.FIRE: return "FIRE"
+		_: return ""   # -1（MOVE/保持）无 stance bonus

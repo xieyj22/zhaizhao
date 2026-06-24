@@ -24,6 +24,13 @@ var _reveal_button: Button
 
 func _ready() -> void:
 	tuning = Tuning.new()
+	# —— M3.5: modifier tuning override（ai_cap/morale_cap delta）——
+	if MetaSession.current_run != null:
+		var ms: Dictionary = MetaSession.current_run.modifier_state
+		if ms.has("ai_confidence_cap_delta"):
+			tuning.l2_confidence_cap = clampf(tuning.l2_confidence_cap + float(ms["ai_confidence_cap_delta"]), 0.0, 1.0)
+		if ms.has("morale_cap_delta"):
+			tuning.morale_cap_turn = maxi(1, tuning.morale_cap_turn + int(ms["morale_cap_delta"]))
 	if MetaSession.current_run != null:
 		# —— M3: 由 RunState + node_cfg 构造 ——
 		state = BattleBuilder.build(MetaSession.current_run, MetaSession.current_node_cfg)

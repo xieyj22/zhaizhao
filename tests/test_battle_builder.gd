@@ -46,3 +46,39 @@ func test_build_injects_hazard():
 func test_build_no_hazard_default():
 	var s := BattleBuilder.build(_run(), {"enemies":[]})
 	assert_eq(s.hazard_modifiers, {}, "非险地节点无修饰符")
+
+# —— M3.5 BB2: modifier 注入 + enemy_pool ——
+
+func test_kit_stance_damage_bonus_applied():
+	# 锐金当令：METAL 招 base_damage +1（tongshi_jinda 是 METAL resulting_stance）
+	var run := _run()
+	run.modifier_state = {"kit_stance_damage_bonus":{"METAL":1}}
+	var s := BattleBuilder.build(run, {"enemies":[]})
+	var u: UnitState = s.units[0]
+	var base = TechniqueDB.find(&"tongshi_jinda")
+	var applied: Array = u.kit.filter(func(t): return String(t.id) == "tongshi_jinda")
+	assert_true(applied.size() > 0, "主角 kit 含 tongshi_jinda")
+	assert_eq(applied[0].base_damage, base.base_damage + 1, "METAL kit base_damage +1")
+
+func test_hazard_baseline_injected():
+	var run := _run()
+	run.modifier_state = {"hazard_baseline":{"chaos":true}}
+	var s := BattleBuilder.build(run, {"enemies":[]})
+	assert_eq(s.hazard_modifiers.get("chaos", false), true, "hazard_baseline chaos 注入")
+
+func test_empty_modifier_state_unchanged():
+	# 边界守护：空 modifier_state → kit/hazard 与 M3 一致
+	var run := _run()   # modifier_state 默认 {}
+	var s := BattleBuilder.build(run, {"enemies":[]})
+	assert_eq(s.hazard_modifiers, {}, "空 modifier → 无 hazard")
+	var u: UnitState = s.units[0]
+	for t in u.kit:
+		var base = TechniqueDB.find(StringName(t.id))
+		assert_eq(t.base_damage, base.base_damage, "%s base_damage 未被改" % String(t.id))
+
+func test_enemy_pool_used_when_no_node_enemies():
+	# node_cfg 无 enemies 但有 node_type → battle_builder 从 enemy_pool.pick 抽
+	var run := _run()
+	var s := BattleBuilder.build(run, {"node_type":"duel","risk":0})
+	var e: Array = s.units.filter(func(u): return u.team == 1)
+	assert_true(e.size() >= 1, "无 node enemies 时从 enemy_pool 抽")
