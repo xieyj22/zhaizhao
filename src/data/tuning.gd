@@ -37,3 +37,8 @@ extends Resource
 @export var ai_w_predict: float = 3.0           # L2 反制维度权重（被 AIPersonality.w_predict_mul 缩放）；3.0 让 brain 的预测反制能压过 L1 opening 价值
 @export var l2_min_samples: int = 3             # 样本不足此数 → predict 贡献归零，纯走 L1
 @export var l2_confidence_cap: float = 0.65     # 预测最大概率封顶 → 永远 ≥35% 留给虚招反制出口（防开挂感）
+
+## —— M3.5: 重玩多样性调参面（HP attrition + 信用稀缺；spec B.3）——
+@export var rest_cap_per_chapter: int = 2          # 镖局休整上限/章（稀缺）
+@export var credit_service_cost: int = 8           # 镖局服务单价（休整/升级/黑市）
+@export var credit_income_chapter1: int = 25       # 章 1 信用产出（~2-4 次服务/run）

@@ -33,3 +33,9 @@ func test_l2_defaults():
 	assert_eq(t.l2_confidence_cap, 0.65, "预测置信度封顶 0.65（留虚招出口）")
 	assert_eq(t.l2_min_samples, 3, "样本不足 3 纯走 L1")
 	assert_eq(t.ai_w_predict, 3.0)
+
+func test_m35_replay_constants():
+	var t := Tuning.new()
+	assert_eq(t.rest_cap_per_chapter, 2, "镖局休整限 2/章")
+	assert_eq(t.credit_service_cost, 8, "镖局服务单价 ~8")
+	assert_eq(t.credit_income_chapter1, 25, "章 1 信用产出 ~25")
