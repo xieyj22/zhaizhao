@@ -34,3 +34,26 @@ func test_feint_apparent_settable():
 	assert_eq(t.apparent_stance, Stance.Id.WATER)
 	# real 效果复用既有 base_damage / resulting_stance（v1 伪装打击）
 	assert_eq(t.base_damage, 6)
+
+func test_variant_default_empty():
+	var t := Technique.new()
+	assert_eq(t.variant, &"", "默认普通版（variant 空串）")
+
+func test_apply_variant_strong_boosts_damage_and_opening():
+	var base := Technique.new()
+	base.base_damage = 5
+	base.opening_dealt = 2
+	var strong := Technique.apply_variant(base, &"strong")
+	assert_eq(strong.variant, &"strong", "标记为强化版")
+	assert_eq(strong.base_damage, 6, "base_damage +1")
+	assert_eq(strong.opening_dealt, 1, "opening_dealt -1")
+	# 原招不变（副本）
+	assert_eq(base.base_damage, 5)
+	assert_eq(base.variant, &"")
+
+func test_apply_variant_empty_is_noop():
+	var base := Technique.new()
+	base.base_damage = 5
+	var v := Technique.apply_variant(base, &"")
+	assert_eq(v.base_damage, 5)
+	assert_eq(v.variant, &"")

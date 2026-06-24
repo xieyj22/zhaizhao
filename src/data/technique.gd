@@ -32,3 +32,15 @@ enum Type { MOVE, STRIKE, STANCE_SWITCH, FEINT, SPECIAL }
 ## [deprecated M2 unused] M0 两段式 Resource 骨架，保留字段不破坏旧测试，M2 不读不写。
 @export var apparent: Resource
 @export var real_effect: Resource
+
+## —— R7 强化版（M3；spec m3-tech §2.5）——；空串 = 普通版
+@export var variant: StringName = &""    # "" | "strong"
+
+## 返回强化版副本（不改原招）。M3 仅 "strong"：base_damage +1 / opening_dealt -1。
+static func apply_variant(base: Technique, v: StringName) -> Technique:
+	var t: Technique = base.duplicate()
+	t.variant = v
+	if v == &"strong":
+		t.base_damage = base.base_damage + 1
+		t.opening_dealt = maxi(0, base.opening_dealt - 1)
+	return t
