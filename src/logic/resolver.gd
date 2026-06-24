@@ -26,7 +26,7 @@ static func _perceived_stance(unit: UnitState, action: Action) -> int:
 static func resolve(actions: Array, state: BattleState, tuning: Tuning) -> Result:
 	var result := Result.new()
 	var lured := _compute_lured(actions)   # FEINT action(obj) -> 是否诱骗成功
-	var order := _sort_actions(actions)
+	var order := _sort_actions(actions, state.hazard_modifiers.get("imbalance", -1))
 	for a in order:
 		if a.unit == null or not a.unit.alive:
 			continue
@@ -53,20 +53,26 @@ static func _compute_lured(actions: Array) -> Dictionary:
 		lured[a] = hooked
 	return lured
 
-## 优先级：速度降序 → 感知架势克制（克制方先）→ team 升序 → 原索引升序
-static func _sort_actions(actions: Array) -> Array:
+## 优先级：有效速度降序 → 感知架势克制（克制方先）→ team 升序 → 原索引升序
+## imba >= 0 时（imbalance 险地），架势 == imba 的单位 speed -2（影响有效速度）；
+## imba == -1 时所有 eff == technique.speed → 与 M0–M2 排序完全一致（border guard）。
+static func _sort_actions(actions: Array, imba: int) -> Array:
 	var keyed: Array = []
 	for i in actions.size():
-		keyed.append([actions[i], i])
+		var act: Action = actions[i]
+		var eff: int = act.technique.speed
+		if imba >= 0 and act.unit != null and act.unit.stance == imba:
+			eff -= 2
+		keyed.append([act, i, eff])
 	keyed.sort_custom(_compare)
 	return keyed.map(func(e): return e[0])
 
 static func _compare(a: Array, b: Array) -> bool:
 	var act_a: Action = a[0]
 	var act_b: Action = b[0]
-	# 1) 速度降序
-	if act_a.technique.speed != act_b.technique.speed:
-		return act_a.technique.speed > act_b.technique.speed
+	# 1) 有效速度降序（imbalance 险地时某势 speed-2；无险地时 eff==technique.speed，与 M0–M2 一致）
+	if a[2] != b[2]:
+		return a[2] > b[2]
 	# 2) 感知架势克制（M2：用 perceived；互克在 5 环里不可能，异或安全）
 	var a_cb := Stance.counters(_perceived_stance(act_a.unit, act_a), _perceived_stance(act_b.unit, act_b))
 	var b_ca := Stance.counters(_perceived_stance(act_b.unit, act_b), _perceived_stance(act_a.unit, act_a))

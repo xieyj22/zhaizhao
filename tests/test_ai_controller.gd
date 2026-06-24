@@ -99,3 +99,32 @@ func test_no_omniscience_signature():
 	var inst := AIController.new()
 	assert_true(inst.has_method("choose_actions"))
 	assert_true(inst.has_method("_score"))
+
+# —— M3 Task TO: ban_close 险地（距离禁制）——
+func test_ban_close_filters_close_strikes():
+	# AI 单位与玩家单位相邻(CLOSE)，kit 只给 close+far 两招 STRIKE。
+	# ban_close=true：AI 的 STRIKE 候选不含 CLOSE 档 → 只剩 far(超距不可达) → 不应选 CLOSE 打击。
+	var a := _unit(&"ai", 1, Vector2i(2,2), Stance.Id.METAL)
+	var b := _unit(&"p",  0, Vector2i(2,3), Stance.Id.WOOD)   # 距离 1 = CLOSE
+	var s := _state([a, b])
+	s.hazard_modifiers = {"ban_close": true}
+	var kits := { String(a.id): [TechniqueKit.strike_close(), TechniqueKit.strike_far()] }
+	var out := AIController.choose_actions(s, 1, tu, kits, 1, PlayerModel.new(), AIPersonality.brute())
+	assert_not_null(out)
+	for act in out.actions:
+		if act.technique.type == Technique.Type.STRIKE:
+			assert_ne(act.technique.required_range, RangeBand.Id.CLOSE, "ban_close 下 AI 不选 CLOSE 打击")
+
+func test_ban_close_default_is_noop():
+	# hazard_modifiers={} 时 AI 仍可选 CLOSE 打击（border guard）
+	var a := _unit(&"ai", 1, Vector2i(2,2), Stance.Id.METAL)
+	var b := _unit(&"p",  0, Vector2i(2,3), Stance.Id.WOOD)
+	var s := _state([a, b])
+	s.hazard_modifiers = {}
+	var kits := { String(a.id): [TechniqueKit.strike_close()] }   # 只有 close
+	var out := AIController.choose_actions(s, 1, tu, kits, 1, PlayerModel.new(), AIPersonality.brute())
+	var saw_close := false
+	for act in out.actions:
+		if act.technique.type == Technique.Type.STRIKE and act.technique.required_range == RangeBand.Id.CLOSE:
+			saw_close = true
+	assert_true(saw_close, "无 ban_close：AI 仍可选 CLOSE 打击")

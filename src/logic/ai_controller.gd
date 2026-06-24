@@ -48,6 +48,9 @@ static func choose_actions(state: BattleState, ai_team: int, tuning: Tuning, kit
 static func _enumerate(u: UnitState, state: BattleState, tuning: Tuning, kit: Array) -> Array:
 	var out: Array = []
 	for tech in kit:
+		# —— M3: ban_close 险地（距离禁制）禁用 CLOSE 打击/虚招 ——
+		if state.hazard_modifiers.get("ban_close", false) and (tech.type == Technique.Type.STRIKE or tech.type == Technique.Type.FEINT) and tech.required_range == RangeBand.Id.CLOSE:
+			continue
 		match tech.type:
 			Technique.Type.STRIKE, Technique.Type.FEINT:
 				for e in state.units:

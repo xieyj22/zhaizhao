@@ -138,3 +138,32 @@ func test_read_events_hit_and_miss():
 	assert_true(ev_hit.any(func(e): return e.hit and e.target_id == String(p0.id)))
 	var ev_miss := TurnOrchestrator.compute_read_events({String(p0.id): Technique.Type.MOVE}, [hit_act])
 	assert_true(ev_miss.any(func(e): return not e.hit))
+
+# —— M3 Task TO: chaos 险地（气场紊乱）——
+func test_chaos_hazard_adds_opening_per_turn():
+	# chaos 下，每单位每回合战意累积额外 +1（相对无 chaos 的同状态）。
+	# turn=5（ACTIVE）：morale accum +1，decay_modifier −1 → decay 0；EARTH 中和：baseline = 0+1-0 = 1。
+	# 加 chaos：add 多 +1 → 0+2-0 = 2。差值精确为 +1（border guard）。
+	var s := _mk_with([Stance.Id.EARTH])
+	s.turn = 5
+	s.hazard_modifiers = {"chaos": true}
+	var orch := TurnOrchestrator.new(s, tu, PlayerModel.new(), 1)
+	orch.end_turn()
+	assert_eq(s.units[0].opening, 2, "chaos 使 opening = baseline 1 + chaos 1 = 2")
+
+	# 对照组：无 chaos 同条件
+	var s2 := _mk_with([Stance.Id.EARTH])
+	s2.turn = 5
+	TurnOrchestrator.new(s2, tu, PlayerModel.new(), 1).end_turn()
+	assert_eq(s2.units[0].opening, 1, "无 chaos baseline 为 1")
+	# 显式断言差值 = 1（border guard：chaos 只加 1，不多不少）
+	assert_eq(s.units[0].opening - s2.units[0].opening, 1, "chaos 精确 +1/turn")
+
+func test_chaos_hazard_default_is_noop():
+	# hazard_modifiers={} 时 end_turn 行为与 M0-M2 一致（border guard）
+	var s := _mk_with([Stance.Id.METAL])
+	s.turn = 5   # ACTIVE：攻势 +1 自叠 +1 战意 − 0 decay = +2
+	s.hazard_modifiers = {}
+	var orch := TurnOrchestrator.new(s, tu, PlayerModel.new(), 1)
+	orch.end_turn()
+	assert_eq(s.units[0].opening, 2, "空 hazard 不改变 M2 战意累积")

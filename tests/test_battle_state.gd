@@ -73,3 +73,17 @@ func test_outcome_last_turn_kill_is_win_not_draw():
 	s.turn = t.morale_cap_turn
 	s.units[1].alive = false
 	assert_eq(s.outcome(t), BattleState.Outcome.TEAM0_WIN)
+
+# —— M3 Task TO: hazard_modifiers 字段 ——
+func test_hazard_modifiers_field_default_empty():
+	var s := BattleState.new()
+	assert_eq(s.hazard_modifiers, {}, "默认无修饰符")
+	# from_dict 兼容旧 dict（无 hazard_modifiers 键）
+	var s2 := BattleState.from_dict({"grid_size":[7,7],"turn":0,"units":[]})
+	assert_eq(s2.hazard_modifiers, {}, "旧 dict 反序列化 hazard 默认空")
+
+func test_hazard_modifiers_roundtrip():
+	var s := _make_1v1()
+	s.hazard_modifiers = {"chaos": true, "imbalance": Stance.Id.METAL, "ban_close": true}
+	var s2 := BattleState.from_dict(s.to_dict())
+	assert_eq(s2.hazard_modifiers, s.hazard_modifiers, "hazard_modifiers 经 to_dict/from_dict 往返一致")

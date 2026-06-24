@@ -112,3 +112,45 @@ func test_counter_ordering_decides_same_speed_tie():
 	Resolver.resolve([ra, rb], s, tu)
 	assert_false(b.alive, "B 被先手秒杀")
 	assert_eq(a.hp, 20, "A 因克制先手，未受伤")
+
+# —— M3 Task TO: imbalance 险地（五行失衡）——
+# imbalance 使指定架势的单位该局速度 -2（影响先后手）。
+# resolver.gd _compare 的 speed 降序段是注入点：imbalance 势单位 speed 取 effect_speed = speed - 2。
+func test_imbalance_hazard_changes_initiative():
+	# A=METAL, B=WOOD, 同 speed=5。
+	# 无 imbalance：A 克 B（金克木），A 先手 → B 死、A 不掉血。
+	# imbalance=METAL：A 的 effective speed = 5-2 = 3 < B 的 5 → B 先手。
+	#   B 先手打 A（WOOD 不克 METAL，无加成），但 A 没死 → A 反击秒 B（METAL 克 WOOD +7≥5）。
+	#   所以 B 反而先掉血但 A 也掉血（border: imbalance 翻转了先后手，A 受伤说明 B 先动了）。
+	var a := _mk(&"a", 0, Vector2i(1,1), Stance.Id.METAL)
+	var b := _mk(&"b", 1, Vector2i(2,1), Stance.Id.WOOD)
+	b.hp = 5
+	var s := BattleState.new(); s.units = [a, b]
+	s.hazard_modifiers = {"imbalance": Stance.Id.METAL}
+
+	var hit_a := _strike(5, 5, Stance.Id.METAL)
+	var hit_b := _strike(5, 5, Stance.Id.WOOD)
+	var ra := Resolver.Action.new(a, hit_a, b.grid_pos)
+	var rb := Resolver.Action.new(b, hit_b, a.grid_pos)
+	Resolver.resolve([ra, rb], s, tu)
+	# imbalance 翻转：B(speed 5) 先于 A(speed 3) 落招 → A 先掉 5 HP（WO不克M，无加成=5）
+	assert_eq(a.hp, 20 - 5, "imbalance=METAL 使 A 速度 -2，B 抢先手打中 A")
+	# A 随后反击：base 5 + 克制 2 = 7 ≥ 5 → B 仍死
+	assert_false(b.alive, "A 反击仍秒杀 B")
+
+func test_imbalance_hazard_default_is_noop():
+	# hazard_modifiers={} 时 _compare 行为与 M2 一致（border guard）：
+	# 同条件无 imbalance → A 先手秒 B，A 不掉血（与 test_counter_ordering_decides_same_speed_tie 一致）
+	var a := _mk(&"a", 0, Vector2i(1,1), Stance.Id.METAL)
+	var b := _mk(&"b", 1, Vector2i(2,1), Stance.Id.WOOD)
+	b.hp = 5
+	var s := BattleState.new(); s.units = [a, b]
+	s.hazard_modifiers = {}
+
+	var hit_a := _strike(5, 5, Stance.Id.METAL)
+	var hit_b := _strike(5, 5, Stance.Id.WOOD)
+	var ra := Resolver.Action.new(a, hit_a, b.grid_pos)
+	var rb := Resolver.Action.new(b, hit_b, a.grid_pos)
+	Resolver.resolve([ra, rb], s, tu)
+	assert_false(b.alive, "无 imbalance：A 先手秒 B")
+	assert_eq(a.hp, 20, "无 imbalance：A 不掉血")

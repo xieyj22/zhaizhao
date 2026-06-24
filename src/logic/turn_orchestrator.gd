@@ -59,6 +59,9 @@ func end_turn() -> void:
 		if Stance.role(u.stance) == Stance.Role.OFFENSIVE:
 			add += tuning.offensive_self_opening
 		add += Morale.accumulation(state.turn, tuning)
+		# —— M3: chaos 险地（气场紊乱）每回合 opening +1 ——
+		if state.hazard_modifiers.get("chaos", false):
+			add += 1
 		var decay := maxi(0, tuning.opening_decay_per_turn - Morale.decay_modifier(state.turn, tuning))
 		if Stance.role(u.stance) == Stance.Role.DEFENSIVE:
 			decay += tuning.defensive_decay_bonus
