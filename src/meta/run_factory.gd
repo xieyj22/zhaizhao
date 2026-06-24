@@ -11,18 +11,44 @@ static func init_run(meta: MetaState, seed: int) -> RunState:
 	r.rng_seed = seed
 	r.current_chapter = 1
 	r.current_node_id = ""   # 空 = hub
+	# —— M3.5: roll modifier + apply ——
+	r.modifier_state = RunModifier.apply(RunModifier.roll(seed))
 	# unlocked = meta 池中 T1 阶（tier_of 默认 T1，通用招落 T1；招牌/隐藏按表筛）
 	r.unlocked_techniques = TechniqueDB.tier_ids(meta.meta_unlocked_pool, 1)
 	# 关系深拷贝自 meta（run 内改关系不污染 meta）
 	r.faction_relations = meta.meta_faction_relations.duplicate(true)
 	# roster 仅主角（镜照门 F1，brain 性格；M3 五势圆融，无 deck 限制）
 	r.player_roster = [_protagonist(r.unlocked_techniques)]
-	# 章 1 起点图
-	r.chapter_maps = {1: MapGenerator.generate_map(seed, 1)}
+	# 章 1 起点图（传 hazard_delta，init 期消费；险地数在 generate_map 调用时定型，事后不可改）
+	var hazard_delta: int = int(r.modifier_state.get("hazard_node_count_delta", 0))
+	r.chapter_maps = {1: MapGenerator.generate_map(seed, 1, hazard_delta)}
 	r.chapter_progress = {1: {"boss_defeated": false, "nodes_visited": []}}
+	# —— M3.5: 消费 init 期 hook（relation/hp）——
+	apply_init_hooks(r, meta)
 	# jianghu_credit / inheritance_slot / technique_variants / hazard_modifiers / run_log
 	# 均 RunState 默认（0 / {} / {} / {} / []）；rest_used/upgrade_used 内存态默认 0
 	return r
+
+## M3.5: 消费 init 期 modifier hook（relation_start_delta / max_hp_mult）。纯函数，改 run。
+## hazard_node_count_delta 不在此（在 init_run 调 generate_map 前读）。
+## kit/hazard_baseline/ai/morale/roster/credit 等 downstream hook 由 BB2/battle.gd/HUB 运行时读。
+static func apply_init_hooks(run: RunState, meta: MetaState) -> void:
+	var ms: Dictionary = run.modifier_state
+	# relation_start_delta：所有非 F8 派系关系 += delta（F8 = 隐世派锁死 -100）
+	if ms.has("relation_start_delta"):
+		var delta: int = int(ms["relation_start_delta"])
+		for fid in run.faction_relations:
+			if fid != "F8":
+				run.faction_relations[fid] = maxi(-100, int(run.faction_relations[fid]) + delta)
+	# max_hp_mult：主角（roster 全员）max_hp/hp × mult
+	if ms.has("max_hp_mult"):
+		var mult: float = float(ms["max_hp_mult"])
+		for i in range(run.player_roster.size()):
+			var pd: Dictionary = run.player_roster[i]
+			var mhp: int = int(round(int(pd["max_hp"]) * mult))
+			pd["max_hp"] = mhp
+			pd["hp"] = mhp
+			run.player_roster[i] = pd
 
 ## 主角 unit_persist_dict（T4 §6.2）。kit_ids = 全部 T1 解锁招（五势圆融）。
 static func _protagonist(t1_ids: Array) -> Dictionary:

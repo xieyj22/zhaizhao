@@ -54,3 +54,11 @@ func test_from_dict_resets_rest_upgrade():
 	r.rest_used = 3
 	var r2 := RunState.from_dict(r.to_dict())
 	assert_eq(r2.rest_used, 0, "反序列化重置 0")
+
+func test_modifier_state_round_trip():
+	var r := _sample()
+	r.modifier_state = {"kit_stance_damage_bonus":{"METAL":1}, "ai_confidence_cap_delta":0.15}
+	var d := r.to_dict()
+	var r2 := RunState.from_dict(d)
+	assert_eq(JSON.stringify(d), JSON.stringify(r2.to_dict()), "modifier_state round-trip")
+	assert_true(r2.to_dict().has("modifier_state"), "modifier_state 进 to_dict")

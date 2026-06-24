@@ -16,6 +16,8 @@ var jianghu_credit: int = 0
 var inheritance_slot: Dictionary = {}      # {}=无；{type,id}
 var chapter_progress: Dictionary = {}      # {chapter_int:{boss_defeated,nodes_visited}}
 var run_log: Array = []
+## —— M3.5: 局 modifier 解析后的 effect（按 hook 分组）；空 = 无 modifier ——
+var modifier_state: Dictionary = {}
 # —— 内存态（不序列化，T2）——
 var rest_used: int = 0
 var upgrade_used: int = 0
@@ -28,7 +30,7 @@ func to_dict() -> Dictionary:
 		"technique_variants": technique_variants, "hazard_modifiers": hazard_modifiers,
 		"faction_relations": faction_relations, "jianghu_credit": jianghu_credit,
 		"inheritance_slot": inheritance_slot, "chapter_progress": chapter_progress,
-		"run_log": run_log,
+		"run_log": run_log, "modifier_state": modifier_state,
 	}   # 注：rest_used/upgrade_used 不进 to_dict（T2）
 
 static func from_dict(d: Dictionary) -> RunState:
@@ -47,6 +49,7 @@ static func from_dict(d: Dictionary) -> RunState:
 	r.inheritance_slot = d.get("inheritance_slot", {})
 	r.chapter_progress = d.get("chapter_progress", {})
 	r.run_log = d.get("run_log", [])
+	r.modifier_state = d.get("modifier_state", {})
 	r.rest_used = 0   # 内存态重置
 	r.upgrade_used = 0
 	return r
