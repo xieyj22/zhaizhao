@@ -14,6 +14,8 @@ var grid_pos: Vector2i = Vector2i.ZERO
 var facing: int = 0
 var guard_broken: bool = false
 var alive: bool = true
+## —— M3: 由 battle_builder 构造时填充（不入 to_dict）——
+var kit: Array = []   # Array[Technique]，战斗态，不序列化
 
 func to_dict() -> Dictionary:
 	return {
