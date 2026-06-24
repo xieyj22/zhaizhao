@@ -24,18 +24,23 @@ var _reveal_button: Button
 
 func _ready() -> void:
 	tuning = Tuning.new()
-	state = BattleState.new()
-	state.grid_size = GRID
-	# 2v2：玩家 team0 左列，敌方 team1 右列
-	state.units = [
-		_mk(&"玩家甲", 0, Vector2i(1, 2), Stance.Id.METAL),
-		_mk(&"玩家乙", 0, Vector2i(1, 4), Stance.Id.WOOD),
-		_mk(&"敌甲", 1, Vector2i(5, 2), Stance.Id.WOOD),
-		_mk(&"敌乙", 1, Vector2i(5, 4), Stance.Id.METAL),
-	]
-	player_model = PlayerModel.new()
-	if personality == null:
+	if MetaSession.current_run != null:
+		# —— M3: 由 RunState + node_cfg 构造 ——
+		state = BattleBuilder.build(MetaSession.current_run, MetaSession.current_node_cfg)
+		personality = _personality_for(MetaSession.current_node_cfg)
+	else:
+		# 回退：旧硬编码 2v2（保留给 M0–M2 场景测试）
+		state = BattleState.new()
+		state.grid_size = GRID
+		# 2v2：玩家 team0 左列，敌方 team1 右列
+		state.units = [
+			_mk(&"玩家甲", 0, Vector2i(1, 2), Stance.Id.METAL),
+			_mk(&"玩家乙", 0, Vector2i(1, 4), Stance.Id.WOOD),
+			_mk(&"敌甲", 1, Vector2i(5, 2), Stance.Id.WOOD),
+			_mk(&"敌乙", 1, Vector2i(5, 4), Stance.Id.METAL),
+		]
 		personality = AIPersonality.brain()   # 默认智将（最显 L2 效果）
+	player_model = PlayerModel.new()
 	orch = TurnOrchestrator.new(state, tuning, player_model, 1)
 
 	view = BattleView.new()
@@ -50,6 +55,16 @@ func _mk(id, team, pos, stance) -> UnitState:
 	u.id = id; u.team = team; u.grid_pos = pos; u.stance = stance
 	u.hp = 20; u.max_hp = 20
 	return u
+
+## node_cfg → 敌方性格（boss→brute；否则按 personality 字段）。
+static func _personality_for(node_cfg: Dictionary) -> AIPersonality:
+	if node_cfg.has("boss_id"):
+		return AIPersonality.brute()   # 章 1 boss 赫连铮 brute
+	var p: String = node_cfg.get("personality", "brain")
+	match p:
+		"brute": return AIPersonality.brute()
+		"trick": return AIPersonality.trick()
+		_: return AIPersonality.brain()
 
 # ---------- UI ----------
 func _build_ui() -> void:
@@ -141,6 +156,9 @@ func _refresh() -> void:
 	view.queue_redraw()
 
 func _player_can_pick(u: UnitState, tech: Technique) -> bool:
+	# —— M3: ban_close 险地，玩家也不可选 CLOSE 打击/虚招 ——
+	if state.hazard_modifiers.get("ban_close", false) and (tech.type == Technique.Type.STRIKE or tech.type == Technique.Type.FEINT) and tech.required_range == RangeBand.Id.CLOSE:
+		return false
 	if tech.type == Technique.Type.STRIKE or tech.type == Technique.Type.FEINT:
 		# 至少有一个范围内敌方才允许选招（否则按钮灰）
 		for e in state.units:
@@ -211,3 +229,43 @@ func _on_reveal() -> void:
 		_reveal_button.text = "战斗结束 — 关闭窗口重玩"
 		var msg: String = ["", "玩家胜！", "玩家败...", "平局"][oc]
 		_hud.text = "战斗结束：%s（回合 %d）" % [msg, state.turn]
+		_write_back_result(oc)
+		var back := Button.new()
+		back.text = "返回"
+		back.position = Vector2(528, 700)
+		back.pressed.connect(_on_back_after_battle)
+		_layer.add_child(back)
+
+## 战斗结束回写 RunState（队友生死）。主角死信号由 HUB/IT 接管。
+func _write_back_result(outcome: int) -> void:
+	if MetaSession.current_run == null:
+		return   # fallback 2v2 不回写
+	var run := MetaSession.current_run
+	for i in range(run.player_roster.size()):
+		var pd: Dictionary = run.player_roster[i]
+		var u: UnitState = _find_unit(state, String(pd["id"]))
+		if u != null:
+			pd["hp"] = u.hp
+			pd["alive"] = u.alive
+			pd["opening"] = u.opening
+			pd["guard_broken"] = u.guard_broken
+			run.player_roster[i] = pd
+	MetaSession.last_battle_outcome = outcome
+
+static func _find_unit(s: BattleState, id_str: String) -> UnitState:
+	for u in s.units:
+		if String(u.id) == id_str:
+			return u
+	return null
+
+func _on_back_after_battle() -> void:
+	var oc := MetaSession.last_battle_outcome
+	var run := MetaSession.current_run
+	if run != null:
+		var m: Dictionary = run.chapter_maps[run.current_chapter]
+		var ty: String = m["nodes"].get(run.current_node_id, {}).get("type", "")
+		if ty == "boss" and oc == BattleState.Outcome.TEAM0_WIN:
+			RunFlow.on_boss_defeated(run)
+		get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")
+	else:
+		get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")

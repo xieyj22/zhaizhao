@@ -11,6 +11,10 @@ run/main_scene="res://src/scenes/battle/battle.tscn"
 window/size/viewport_width=1280
 window/size/viewport_height=800
 
+[autoload]
+
+MetaSession="*res://src/meta/meta_session.gd"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

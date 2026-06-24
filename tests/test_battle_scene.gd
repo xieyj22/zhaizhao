@@ -1,5 +1,11 @@
 extends GutTest
 
+func after_each():
+	# 兜底：每个测试后重置 MetaSession，防全局态泄漏（RunState 测试的 current_run
+	# 绝不能漏进 2v2 fallback 测试——后者依赖 current_run == null）
+	MetaSession.current_run = null
+	MetaSession.current_node_cfg = {}
+
 func test_2v2_pick_reveal_ai_drive_ends_with_outcome():
 	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
 	add_child(battle)
@@ -77,3 +83,25 @@ func test_game_over_locks_further_reveals():
 	assert_eq(battle.state.turn, turn_before, "game_over 后揭晓不推进回合")
 	assert_true(battle.game_over)
 	remove_child(battle); battle.queue_free()
+
+func test_battle_constructs_from_run_state():
+	# 设 MetaSession.current_run → battle.gd 应据此构造（玩家=roster 主角，敌方=node_cfg）
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	var node_cfg: Dictionary = {"enemies":[
+		{"id":"e1","faction":"F2","personality":"brute","grid_pos":[5,3],"stance":Stance.Id.WOOD,"kit":["chifeng_lianci","chifeng_yajin"]}
+	]}
+	MetaSession.current_run = run
+	MetaSession.current_node_cfg = node_cfg
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	var p: Array = battle.state.units.filter(func(u): return u.team == 0)
+	var e: Array = battle.state.units.filter(func(u): return u.team == 1)
+	assert_eq(p.size(), 1, "玩家方=roster（主角）")
+	assert_eq(e.size(), 1, "敌方=node_cfg")
+	assert_eq(String(e[0].id), "e1")
+	remove_child(battle)
+	battle.queue_free()
+	# 清理全局态，不污染后续测试
+	MetaSession.current_run = null
+	MetaSession.current_node_cfg = {}
