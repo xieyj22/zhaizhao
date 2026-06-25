@@ -60,3 +60,25 @@ static func _protagonist(t1_ids: Array) -> Dictionary:
 		"display_name": "遗照", "faction_id": "F1", "personality_id": "brain",
 		"kit_ids": t1_ids.duplicate(), "is_protagonist": true,
 	}
+
+## 招募队友 unit_persist_dict（与 _protagonist 对称，纯函数 JSON-safe）。
+## roster_index = 招募时 roster 大小（决定 id 后缀 + grid_pos 槽，hub 传入不在此 roll）。
+## hp=18 略低于主角 20（"主角是天命"叙事）；kit=派系招牌 2 招全带；is_protagonist:false（死不结束局）。
+static func _ally(faction_id: String, roster_index: int) -> Dictionary:
+	return {
+		"id": "ally_%s_%d" % [faction_id, roster_index],
+		"team": 0, "hp": 18, "max_hp": 18,
+		"opening": 0, "max_opening": 6,
+		"stance": FactionData.stance_for(faction_id),
+		"grid_pos": (FactionData.PLAYER_SLOTS[roster_index] as Array).duplicate(),
+		"facing": 0, "guard_broken": false, "alive": true,
+		"display_name": _ally_display_name(faction_id),
+		"faction_id": faction_id,
+		"personality_id": FactionData.tendency(faction_id),
+		"kit_ids": (FactionData.SIGNATURE_KITS.get(faction_id, []) as Array).duplicate(),
+		"is_protagonist": false,
+	}
+
+## 队友名（派系 → ALLY_GIVEN_NAMES 查表，兜底"同袍"）。
+static func _ally_display_name(faction_id: String) -> String:
+	return String(FactionData.ALLY_GIVEN_NAMES.get(faction_id, "同袍"))

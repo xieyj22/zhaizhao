@@ -3,6 +3,8 @@ extends Node2D
 var _layer: CanvasLayer
 var _status: Label
 var _modifier_line: Label   # M3.5: 当局天象简述行
+var _btn_recruit: Button         # 招募同袍主按钮（刷新 disabled 用）
+var _recruit_panel: VBoxContainer # 派系子按钮列表（展开/收起）
 
 func _ready() -> void:
 	MetaSession.meta_state = MetaState.load_from()
@@ -25,14 +27,15 @@ func _build_ui() -> void:
 	var btn_cont := Button.new(); btn_cont.text = "继续闯荡（节点图）"
 	btn_cont.pressed.connect(_on_open_map)
 	root.add_child(btn_cont)
-	# —— M3.5: 招募占位（M3 仅文案；roster_cap gate 在 _can_recruit 内守，留 M4 完整招募实装接）——
-	var btn_recruit := Button.new(); btn_recruit.text = "招募同袍（占位）"
-	btn_recruit.disabled = not _can_recruit()
-	btn_recruit.pressed.connect(_on_recruit_placeholder)
-	root.add_child(btn_recruit)
-	for f in ["F1 镜照","F2 赤锋","F4 听潮"]:
-		var lbl := Label.new(); lbl.text = "【%s 代表】（招募/关系/技谱）" % f
-		root.add_child(lbl)
+	# —— 招募同袍：点开展开派系按钮列表（实装，替代 M3 占位）——
+	_btn_recruit = Button.new()
+	_btn_recruit.text = "招募同袍"
+	_btn_recruit.disabled = not _can_recruit()
+	_btn_recruit.pressed.connect(_on_recruit_placeholder)
+	root.add_child(_btn_recruit)
+	_recruit_panel = VBoxContainer()
+	_recruit_panel.visible = false
+	root.add_child(_recruit_panel)
 
 func _refresh_status() -> void:
 	var m := MetaSession.meta_state
@@ -44,6 +47,9 @@ func _refresh_status() -> void:
 		_modifier_line.text = "天象：" + _modifier_brief(MetaSession.current_run.modifier_state)
 	else:
 		_modifier_line.text = ""
+	# 招募按钮 disabled 跟随状态（从 map/battle 返 hub 时刷新）
+	if _btn_recruit != null:
+		_btn_recruit.disabled = not _can_recruit()
 
 ## M3.5: modifier_state → 中文简述（hook 反推；M4 可换 modifier_ids 反查 POOL 取 name/desc）。
 ## 用 hook 键而非 id（meta UI 展示的是「效果」而非「名字」，避免 meta 改 POOL 文案时此处失同步）。
@@ -61,19 +67,60 @@ func _modifier_brief(ms: Dictionary) -> String:
 	if ms.has("kit_stance_speed_bonus"): parts.append("厚土镇煞")
 	return ", ".join(parts) if not parts.is_empty() else "风平浪静"
 
-## M3.5: roster_cap modifier 招募 gate。无 modifier 时无上限（cap=99 兜底）。
+## 招募 gate：roster_cap 未满 且 至少一个派系关系达阈值（can_recruit，F8 不可招）。
+## roster_cap 默认 3（与 M2"队伍小 2-3"对齐）；「独行」modifier 可覆盖为更小。
 func _can_recruit() -> bool:
 	var run := MetaSession.current_run
 	if run == null:
 		return false
-	var cap := 99
+	var cap := 3
 	if run.modifier_state.has("roster_cap"):
 		cap = int(run.modifier_state["roster_cap"])
-	return run.player_roster.size() < cap
+	if run.player_roster.size() >= cap:
+		return false
+	# 至少一个派系可招，否则按钮亮着点开全灰
+	for fid in FactionData.recruit_factions():
+		if FactionRelations.can_recruit(run.faction_relations, fid):
+			return true
+	return false
 
-## M3.5: 招募占位回调（M3 hub 招募未实装；gate 已守，留 M4 接 FactionRelations.can_recruit + roster.append）。
+## 点「招募同袍」：toggle 派系按钮列表展开/收起。
 func _on_recruit_placeholder() -> void:
-	pass
+	_refresh_recruit_panel()
+	_recruit_panel.visible = not _recruit_panel.visible
+
+## 刷新派系子按钮（F1–F7，各标派名/关系值/可招状态）。
+func _refresh_recruit_panel() -> void:
+	for c in _recruit_panel.get_children():
+		c.queue_free()
+	var run := MetaSession.current_run
+	if run == null:
+		return
+	for fid in FactionData.recruit_factions():
+		var rel: int = int(run.faction_relations.get(fid, 0))
+		var can: bool = FactionRelations.can_recruit(run.faction_relations, fid)
+		var btn := Button.new()
+		btn.text = "%s | 关系 %d | %s" % [FactionData.NAMES[fid], rel, "可招" if can else "不可招"]
+		btn.disabled = not can
+		btn.pressed.connect(_on_recruit_faction.bind(fid))
+		_recruit_panel.add_child(btn)
+
+## 招募某派一名队友：生成 unit_persist_dict → roster.append → 刷新 UI。
+func _on_recruit_faction(fid: String) -> void:
+	var run := MetaSession.current_run
+	if run == null:
+		return
+	# 二次守护（按钮 disabled 已守，防 panel 未刷新时误点）
+	if not FactionRelations.can_recruit(run.faction_relations, fid):
+		return
+	if not _can_recruit():   # roster_cap 守护
+		return
+	var idx: int = run.player_roster.size()
+	if idx >= FactionData.PLAYER_SLOTS.size():
+		return   # 槽位耗尽兜底（roster_cap 应先达）
+	run.player_roster.append(RunFactory._ally(fid, idx))
+	_refresh_recruit_panel()
+	_refresh_status()   # 含 _btn_recruit.disabled 刷新
 
 func _on_new_run() -> void:
 	var seed := 7

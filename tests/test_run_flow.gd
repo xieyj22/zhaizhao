@@ -70,3 +70,18 @@ func test_is_run_over_when_protagonist_dead():
 	assert_false(RunFlow.is_run_over(run), "主角存活 → 局未结束")
 	run.player_roster[0]["alive"] = false
 	assert_true(RunFlow.is_run_over(run), "主角死 → 局结束")
+
+func test_is_run_over_ally_dead_protagonist_alive():
+	# 队友死、主角活 → 局不结束（permadeath 只认主角）
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.player_roster.append(RunFactory._ally("F4", 1))
+	run.player_roster[1]["alive"] = false   # 队友死
+	assert_false(RunFlow.is_run_over(run), "队友死主角活 → 局未结束")
+
+func test_is_run_over_protagonist_dead_ally_alive():
+	# 主角死、队友活 → 局结束（即便有存活队友）
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.player_roster.append(RunFactory._ally("F4", 1))
+	run.player_roster[0]["alive"] = false   # 主角死
+	run.player_roster[1]["alive"] = true    # 队友活
+	assert_true(RunFlow.is_run_over(run), "主角死 → 局结束（无视队友存活）")

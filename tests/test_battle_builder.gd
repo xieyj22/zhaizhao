@@ -82,3 +82,22 @@ func test_enemy_pool_used_when_no_node_enemies():
 	var s := BattleBuilder.build(run, {"node_type":"duel","risk":0})
 	var e: Array = s.units.filter(func(u): return u.team == 1)
 	assert_true(e.size() >= 1, "无 node enemies 时从 enemy_pool 抽")
+
+# —— 招募同袍：多队友进 build（team0 多单位，不叠格）——
+
+func test_build_two_player_units_no_grid_overlap():
+	# roster=[主角[1,3], 队友[1,4]] → build 后 team0 两单位 grid_pos 不同
+	var run := _run()
+	run.player_roster.append(RunFactory._ally("F4", 1))
+	var s := BattleBuilder.build(run, {"enemies":[]})
+	var p: Array = s.units.filter(func(u): return u.team == 0)
+	assert_eq(p.size(), 2, "team0 两单位（主角+队友）")
+	assert_ne(p[0].grid_pos, p[1].grid_pos, "主角队友不叠格")
+
+func test_build_ally_kit_resolved():
+	# 队友 kit_ids=派系招牌 → 查表成功（kit.size>0，确认招牌 id 在 TechniqueDB）
+	var run := _run()
+	run.player_roster.append(RunFactory._ally("F1", 1))   # 镜照招牌
+	var s := BattleBuilder.build(run, {"enemies":[]})
+	var ally: UnitState = s.units.filter(func(u): return u.team == 0)[1]
+	assert_eq(ally.kit.size(), 2, "队友 kit 含 2 招招牌（查表成功）")
