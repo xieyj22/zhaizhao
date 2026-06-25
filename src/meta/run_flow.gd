@@ -37,6 +37,14 @@ static func on_boss_defeated(run: RunState) -> void:
 	cp["boss_defeated"] = true
 	run.chapter_progress[run.current_chapter] = cp
 
+## permadeath：主角死 = 局结束（T4 §7.1：主角死亡→单 run 结束，meta 保留→回 hub）。
+## battle.gd 战斗后据此判定回 hub（commit meta）还是回 map（继续）。
+static func is_run_over(run: RunState) -> bool:
+	for pd in run.player_roster:
+		if bool(pd.get("is_protagonist", false)):
+			return not bool(pd.get("alive", true))
+	return false   # 无主角（不应发生）→ 不结束
+
 ## 进入章节图：若 current_node_id 为空（在 hub），定位到当前章 L0 起点节点。
 ## 幂等——已在某节点时（如战斗后返回 map）不动。map 场景 _ready 调用。
 ## 修 bug：init_run 设 current_node_id="" 进 map 后 can_advance_node 全 false（无边 from=""）→ 节点全 disabled。

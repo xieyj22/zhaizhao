@@ -63,3 +63,10 @@ func test_place_at_chapter_start_idempotent():
 	assert_ne(first, "")
 	RunFlow.place_at_chapter_start(run)
 	assert_eq(run.current_node_id, first, "已在节点时幂等不改")
+
+func test_is_run_over_when_protagonist_dead():
+	# permadeath：主角死 = 局结束（回 hub，meta 沉淀）。主角存活 = 继续。
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	assert_false(RunFlow.is_run_over(run), "主角存活 → 局未结束")
+	run.player_roster[0]["alive"] = false
+	assert_true(RunFlow.is_run_over(run), "主角死 → 局结束")

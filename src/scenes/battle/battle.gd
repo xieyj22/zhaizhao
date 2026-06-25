@@ -238,7 +238,7 @@ func _on_reveal() -> void:
 		_hud.text = "战斗结束：%s（回合 %d）" % [msg, state.turn]
 		_write_back_result(oc)
 		var back := Button.new()
-		back.text = "返回"
+		back.text = "主角阵亡 — 回大本营" if oc == BattleState.Outcome.TEAM1_WIN else "返回"
 		back.position = Vector2(528, 700)
 		back.pressed.connect(_on_back_after_battle)
 		_layer.add_child(back)
@@ -266,13 +266,22 @@ static func _find_unit(s: BattleState, id_str: String) -> UnitState:
 	return null
 
 func _on_back_after_battle() -> void:
-	var oc := MetaSession.last_battle_outcome
 	var run := MetaSession.current_run
-	if run != null:
-		var m: Dictionary = run.chapter_maps[run.current_chapter]
-		var ty: String = m["nodes"].get(run.current_node_id, {}).get("type", "")
-		if ty == "boss" and oc == BattleState.Outcome.TEAM0_WIN:
-			RunFlow.on_boss_defeated(run)
-		get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")
-	else:
+	if run == null:
 		get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")
+		return
+	# permadeath（T4 §7.1）：主角阵亡 → 局结束，meta 沉淀（解锁招并入池，runs_completed 不增），回 hub。
+	if RunFlow.is_run_over(run):
+		var meta := MetaState.commit_run_to_meta(MetaSession.meta_state, run, false)
+		MetaState.save_to(meta)
+		MetaSession.meta_state = meta
+		MetaSession.current_run = null
+		get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")
+		return
+	# 存活 → 继续：boss 胜则标记，回 map
+	var oc := MetaSession.last_battle_outcome
+	var m: Dictionary = run.chapter_maps[run.current_chapter]
+	var ty: String = m["nodes"].get(run.current_node_id, {}).get("type", "")
+	if ty == "boss" and oc == BattleState.Outcome.TEAM0_WIN:
+		RunFlow.on_boss_defeated(run)
+	get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")
