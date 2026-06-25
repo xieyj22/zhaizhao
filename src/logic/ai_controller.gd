@@ -25,7 +25,9 @@ static func choose_actions(state: BattleState, ai_team: int, tuning: Tuning, kit
 		var nearest := _nearest_enemy(u, state)
 		if nearest != null:
 			var key := player_model.featurize(nearest, state, tuning)
-			if player_model.confidence(key, tuning) > 0.0:
+			# —— M4: BossTrait.predict_confidence（mind_eye → 1.0；空 trait 等价原 confidence）——
+			var conf := BossTrait.predict_confidence(state, u, player_model.confidence(key, tuning))
+			if conf > 0.0:
 				predictions[String(nearest.id)] = player_model.argmax_type(key)
 		var kit: Array = kits.get(String(u.id), TechniqueKit.default_kit())
 		var cands := _enumerate(u, state, tuning, kit)

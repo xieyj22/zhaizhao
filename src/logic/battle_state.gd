@@ -8,6 +8,8 @@ var units: Array = []                      # Array[UnitState]
 var grid_size: Vector2i = Vector2i(7, 7)
 var turn: int = 0
 var hazard_modifiers: Dictionary = {}      # M3 险地修饰符（chaos/ban_close/imbalance）；空=无（与 M0-M2 一致）
+## —— M4: boss 机制 trait 表 {boss_id: trait_name}；空=无 boss（与 M0-M2 一致）——
+var boss_traits: Dictionary = {}
 
 func unit_at(p: Vector2i) -> UnitState:
 	for u in units:
@@ -43,6 +45,7 @@ func to_dict() -> Dictionary:
 		"turn": turn,
 		"units": units.map(func(u): return u.to_dict()),
 		"hazard_modifiers": hazard_modifiers,
+		"boss_traits": boss_traits,
 	}
 
 static func from_dict(d: Dictionary) -> BattleState:
@@ -51,4 +54,5 @@ static func from_dict(d: Dictionary) -> BattleState:
 	s.turn = d["turn"]
 	s.units = (d["units"] as Array).map(func(u): return UnitState.from_dict(u))
 	s.hazard_modifiers = d.get("hazard_modifiers", {})
+	s.boss_traits = d.get("boss_traits", {})
 	return s

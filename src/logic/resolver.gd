@@ -105,15 +105,20 @@ static func _apply_one(a: Action, state: BattleState, tuning: Tuning, result: Re
 				if t.type == Technique.Type.FEINT:
 					if t.apparent_stance >= 0:
 						# 伪装 FEINT：上钩→奖励倍率；识破→落空倍率
-						mult = t.feint_bonus_mult if lured.get(a, false) else t.feint_fail_mult
+						# —— M4: BossTrait.feint_mult（chain_feint 改写；空 trait 等价原三元）——
+						mult = BossTrait.feint_mult(state, u, lured.get(a, false), t.feint_fail_mult, t.feint_bonus_mult)
 						verb = "虚招诱中" if lured.get(a, false) else "虚招落空"
 					# apparent<0：伪装打击但不诱骗，mult 维持 1.0（同 STRIKE）
 				base = int(round(base * mult))
 				var counters := Stance.counters(u.stance, target.stance)
 				base += tuning.counter_bonus_damage if counters else 0
 				var dmg: int = Opening.compute_damage(base, target.opening, tuning.opening_damage_mult, target.guard_broken)
+				# —— M4: frenzy（BossTrait.on_end_turn 置位）→ 伤害 ×1.5 ——
+				if u.frenzied:
+					dmg = int(dmg * 1.5)
 				target.hp -= dmg
-				target.opening += t.opening_dealt + (tuning.counter_bonus_opening if counters else 0)
+				# —— M4: BossTrait.opening_delta（iron_body 受破绽-1；空 trait 等价原值）——
+				target.opening += BossTrait.opening_delta(state, target, t.opening_dealt + (tuning.counter_bonus_opening if counters else 0))
 				if target.opening >= target.max_opening:
 					target.guard_broken = true
 				if target.hp <= 0:
