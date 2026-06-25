@@ -105,3 +105,22 @@ func test_battle_constructs_from_run_state():
 	# 清理全局态，不污染后续测试
 	MetaSession.current_run = null
 	MetaSession.current_node_cfg = {}
+
+func test_retreat_button_present_and_visible_during_battle():
+	# 撤退按钮：战斗中存在且可见（game_over 后由 _on_reveal hide）
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	MetaSession.current_run = run
+	MetaSession.current_node_cfg = {"enemies":[
+		{"id":"e1","faction":"F2","personality":"brute","grid_pos":[5,3],
+		 "stance":Stance.Id.WOOD,"kit":["chifeng_lianci","chifeng_yajin"]}
+	]}
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	assert_not_null(battle._retreat_button, "撤退按钮已创建")
+	assert_true(battle._retreat_button.visible, "战斗中撤退按钮可见")
+	assert_false(battle.game_over, "初始未 game_over")
+	remove_child(battle)
+	battle.queue_free()
+	MetaSession.current_run = null
+	MetaSession.current_node_cfg = {}

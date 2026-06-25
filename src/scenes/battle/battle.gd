@@ -21,6 +21,7 @@ var _panel: VBoxContainer
 var _target_panel: VBoxContainer
 var _hud: Label
 var _reveal_button: Button
+var _retreat_button: Button   # 撤退（本场不算）——战斗中可见，game_over 隐藏
 
 func _ready() -> void:
 	tuning = Tuning.new()
@@ -104,6 +105,12 @@ func _build_ui() -> void:
 	_reveal_button.text = "揭晓结算"
 	_reveal_button.pressed.connect(_on_reveal)
 	root.add_child(_reveal_button)
+	# 撤退：本场不算（不回写 roster，保持进战前状态）回地图重选节点。左下绝对定位避开右侧面板。
+	_retreat_button = Button.new()
+	_retreat_button.text = "撤退（本场不算）"
+	_retreat_button.position = Vector2(40, 700)
+	_retreat_button.pressed.connect(_on_retreat)
+	_layer.add_child(_retreat_button)
 
 func _refresh() -> void:
 	for c in _panel.get_children():
@@ -249,6 +256,8 @@ func _on_reveal() -> void:
 		game_over = true
 		_reveal_button.disabled = true
 		_reveal_button.text = "战斗结束 — 关闭窗口重玩"
+		if _retreat_button != null:
+			_retreat_button.hide()   # 战斗结束后由"返回"按钮接管
 		var msg: String = ["", "玩家胜！", "玩家败...", "平局"][oc]
 		_hud.text = "战斗结束：%s（回合 %d）" % [msg, state.turn]
 		_write_back_result(oc)
@@ -281,6 +290,11 @@ static func _find_unit(s: BattleState, id_str: String) -> UnitState:
 		if String(u.id) == id_str:
 			return u
 	return null
+
+## 撤退：本场不算（不调 _write_back_result → roster 保持进战前状态），回地图重选节点。
+## game_over 后按钮已 hide，不会走到。current_node_id 仍在战斗节点，回 map 可重进或绕路。
+func _on_retreat() -> void:
+	get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")
 
 func _on_back_after_battle() -> void:
 	var run := MetaSession.current_run
