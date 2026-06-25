@@ -9,13 +9,24 @@ static func build(run: RunState, node_cfg: Dictionary) -> BattleState:
 	var units: Array = []
 	for pd in run.player_roster:
 		units.append(_unit_from_roster(pd, run))
-	# 敌方：node_cfg.enemies 优先（兼容旧测试），否则从 enemy_pool.pick 抽
-	var enemies: Array = node_cfg.get("enemies", [])
-	if enemies.is_empty() and node_cfg.has("node_type"):
-		var ec: Dictionary = EnemyPool.pick(String(node_cfg["node_type"]), int(node_cfg.get("risk", 0)), run.rng_seed)
-		enemies = ec["enemies"]
-	for ed in enemies:
-		units.append(_unit_from_enemy(ed))
+	# 敌方：node_cfg.boss_id 优先（boss 节点，BOSS_CONFIG 构造 + 难度曲线）；
+	#       否则 node_cfg.enemies（兼容旧测试），再否则从 enemy_pool.pick 抽。
+	if node_cfg.has("boss_id"):
+		var boss_id: String = String(node_cfg["boss_id"])
+		var bu: UnitState = _unit_from_boss(boss_id, run)
+		units.append(bu)
+		# trait 注入 BattleState.boss_traits（BossTrait._trait_of 读 key=boss_id）
+		var cfg: Dictionary = BossConfig.get_boss(boss_id)
+		var trait_name: String = String(cfg.get("trait", ""))
+		if trait_name != "":
+			s.boss_traits[boss_id] = trait_name
+	else:
+		var enemies: Array = node_cfg.get("enemies", [])
+		if enemies.is_empty() and node_cfg.has("node_type"):
+			var ec: Dictionary = EnemyPool.pick(String(node_cfg["node_type"]), int(node_cfg.get("risk", 0)), run.rng_seed)
+			enemies = ec["enemies"]
+		for ed in enemies:
+			units.append(_unit_from_enemy(ed))
 	s.units = units
 	# hazard：node_cfg.hazard ∪ modifier hazard_baseline（深合并）
 	var hz: Dictionary = node_cfg.get("hazard", {})
@@ -41,6 +52,37 @@ static func _unit_from_enemy(ed: Dictionary) -> UnitState:
 	u.hp = 20; u.max_hp = 20
 	u.kit = _build_kit(ed.get("kit",[]), RunState.new())   # 敌方无 variant（run 空）
 	return u
+
+## boss 敌方单位：查 BOSS_CONFIG 取 personality/stance/kit/hp_base。
+## hp 按章难度曲线缩放：hp_base × (1+0.15(chapter-1)) × boss 强化倍率（章3×1.3/章4×1.6/他×1.0）。
+## product §4.6 曲线 + §5.5 boss 强化。boss_id 标注（BossTrait._trait_of 读）。
+static func _unit_from_boss(boss_id: String, run: RunState) -> UnitState:
+	var cfg: Dictionary = BossConfig.get_boss(boss_id)
+	var u := UnitState.new()
+	u.id = StringName(boss_id)
+	u.team = 1
+	u.boss_id = boss_id
+	u.grid_pos = Vector2i(5, 3)
+	u.stance = int(cfg.get("stance", Stance.Id.METAL))
+	var hp := _scaled_boss_hp(int(cfg.get("hp_base", 20)), run.current_chapter)
+	u.hp = hp
+	u.max_hp = hp
+	u.kit = _build_kit(cfg.get("kit", []), run)
+	return u
+
+## 章节难度曲线 + boss 强化倍率（product §4.6 + §5.5）。
+## 曲线：hp_base × (1 + 0.15 × (chapter-1))（章1×1.0 ... 章4×1.45）。
+## boss 强化（叠加）：章3×1.3 / 章4×1.6 / 章1·2×1.0。
+static func _scaled_boss_hp(hp_base: int, chapter: int) -> int:
+	var curve_mult: float = 1.0 + 0.15 * float(chapter - 1)
+	var boss_mult: float = 1.0
+	match chapter:
+		3:
+			boss_mult = 1.3
+		4:
+			boss_mult = 1.6
+	var hp: float = float(hp_base) * curve_mult * boss_mult
+	return int(round(hp))
 
 ## kit_ids -> Technique[]（查表 find + variant 覆盖 + modifier 注入）。未知 id 跳过（find 返回 null）。
 ## M3.5：modifier 按招 resulting_stance 所属势施加（kit 构造期不知单位架势，故按招势）。

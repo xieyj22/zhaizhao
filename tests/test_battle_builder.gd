@@ -101,3 +101,69 @@ func test_build_ally_kit_resolved():
 	var s := BattleBuilder.build(run, {"enemies":[]})
 	var ally: UnitState = s.units.filter(func(u): return u.team == 0)[1]
 	assert_eq(ally.kit.size(), 2, "队友 kit 含 2 招招牌（查表成功）")
+
+# —— M4 T4: boss 单位 hp 按章缩放 + boss_traits 注入 ——
+
+func _boss_run(chapter: int) -> RunState:
+	var r := RunState.new()
+	r.current_chapter = chapter
+	r.player_roster = [{
+		"id":"protagonist", "team":0, "hp":20, "max_hp":20, "opening":0, "max_opening":6,
+		"stance":0, "grid_pos":[1,3], "facing":0, "guard_broken":false, "alive":true,
+		"kit_ids":["tongshi_jinda"], "is_protagonist":true,
+	}]
+	return r
+
+func test_boss_hp_scaled_by_chapter_difficulty():
+	# 章3 难度曲线 ×1.3 + boss 强化 ×1.3 = hp_base × 1.69
+	# zongzhenglie hp_base=45, 章3: 45×1.3(曲线)×1.3(强化)=76.05≈76
+	var run := _boss_run(3)
+	var s := BattleBuilder.build(run, {"boss_id":"zongzhenglie","node_type":"boss"})
+	var boss: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(boss.max_hp, 76, "章3 boss hp 难度曲线+强化 (45×1.3×1.3)")
+	assert_eq(boss.hp, 76, "boss hp=max_hp（满血开场）")
+
+func test_boss_hp_yanwujiu_ch4():
+	# yanwujiu 章4: 65×1.45(曲线)×1.6(强化)=150.8≈151
+	var run := _boss_run(4)
+	var s := BattleBuilder.build(run, {"boss_id":"yanwujiu","node_type":"boss"})
+	var boss: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(boss.max_hp, 151, "章4 掌门 hp (65×1.45×1.6)")
+
+func test_boss_hp_no_scale_ch1():
+	# 章1 hailianzheng: 40×1.0(曲线)×1.0(强化)=40（章1/2 无 boss 强化）
+	var run := _boss_run(1)
+	var s := BattleBuilder.build(run, {"boss_id":"hailianzheng","node_type":"boss"})
+	var boss: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(boss.max_hp, 40, "章1 boss hp 无缩放")
+
+func test_boss_traits_injected():
+	var run := _boss_run(3)
+	var s := BattleBuilder.build(run, {"boss_id":"zongzhenglie","node_type":"boss"})
+	assert_eq(s.boss_traits.get("zongzhenglie", ""), "iron_body", "boss_traits 注入")
+
+func test_boss_unit_boss_id_set():
+	# boss 敌方单位 boss_id 标注（BossTrait._trait_of 读它）
+	var run := _boss_run(4)
+	var s := BattleBuilder.build(run, {"boss_id":"leiwanjun","node_type":"boss"})
+	var boss: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(boss.boss_id, "leiwanjun", "boss 单位 boss_id 标注")
+	assert_eq(s.boss_traits.get("leiwanjun", ""), "frenzy", "leiwanjun trait=frenzy")
+
+func test_boss_kit_resolved_from_config():
+	# boss kit 来自 BossConfig（zongzhenglie: chifeng_lianci + chifeng_yajin）
+	var run := _boss_run(3)
+	var s := BattleBuilder.build(run, {"boss_id":"zongzhenglie","node_type":"boss"})
+	var boss: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(boss.kit.size(), 2, "boss kit 来自 BOSS_CONFIG (2 招)")
+
+func test_boss_stance_personality_from_config():
+	var run := _boss_run(3)
+	var s := BattleBuilder.build(run, {"boss_id":"zongzhenglie","node_type":"boss"})
+	var boss: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(boss.stance, Stance.Id.METAL, "boss stance 来自 BOSS_CONFIG")
+
+func test_no_boss_id_fallback_no_trait():
+	# 边界守护：node_cfg 无 boss_id → 不触发 boss 逻辑，boss_traits 空（与 M0-M3 一致）
+	var s := BattleBuilder.build(_boss_run(1), {"enemies":[]})
+	assert_eq(s.boss_traits, {}, "无 boss_id → boss_traits 空")
