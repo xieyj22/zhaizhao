@@ -114,7 +114,7 @@ static func _tuning_for(run: RunState) -> Tuning:
 static func _fight_battle(run: RunState, node_type: String, node_id: String,
 		tuning: Tuning, player_personality: AIPersonality,
 		meta: MetaState, res: RunResult) -> void:
-	var node_cfg: Dictionary = _node_cfg_for(node_type, node_id, run.rng_seed)
+	var node_cfg: Dictionary = _node_cfg_for(run.current_chapter, node_type, node_id, run.rng_seed)
 	var s := BattleBuilder.build(run, node_cfg)
 	# 敌方性格（boss→brute；否则读 node_cfg.personality——由 EnemyPool 组合带出）
 	var enemy_personality := _enemy_personality_for(node_cfg)
@@ -174,14 +174,15 @@ static func _fight_battle(run: RunState, node_type: String, node_id: String,
 				res.chapter_reached = run.current_chapter
 			# TEAM1_WIN：主角若死由下轮 is_run_over 捕获；主角活则 stalled（boss 邻接为空）
 
-## node_cfg 构造：boss 固定 hailianzheng；非 boss 主动 EnemyPool.pick 取组合（带 personality + risk），
+## node_cfg 构造：boss 固定（按章 EnemyPool.CHAPTER_BOSS_ID）；非 boss 主动 EnemyPool.pick 取组合（带 personality + risk），
 ## 让 BattleBuilder 用显式 enemies（不二次 pick）+ _enemy_personality_for 读组合性格。
-static func _node_cfg_for(node_type: String, node_id: String, rng_seed: int) -> Dictionary:
+static func _node_cfg_for(chapter: int, node_type: String, node_id: String, rng_seed: int) -> Dictionary:
 	if node_type == "boss":
-		return {"boss_id":"hailianzheng","node_type":"boss"}
+		var boss_id: String = String(EnemyPool.CHAPTER_BOSS_ID.get(chapter, "hailianzheng"))
+		return {"boss_id":boss_id,"node_type":"boss"}
 	# 非 boss：主动抽组合，把 enemies + personality 显式带进 node_cfg
 	var risk: int = 1 if node_type == "hazard" else 0
-	var combo: Dictionary = EnemyPool.pick(node_type, risk, rng_seed)
+	var combo: Dictionary = EnemyPool.pick(chapter, node_type, risk, rng_seed)
 	return {
 		"node_type": node_type,
 		"risk": risk,
@@ -202,7 +203,7 @@ static func _enemy_personality_for(node_cfg: Dictionary) -> AIPersonality:
 ## visit/escort 节点：roll 解锁招加进 unlocked（复刻 map.gd:62-64，传真实 meta_pool）。
 static func _grant_unlock(run: RunState, node_type: String, node_id: String, meta_pool: Array) -> void:
 	var reward: Variant = UnlockRules.roll_unlock_reward(meta_pool, node_type,
-		_node_cfg_for(node_type, node_id, run.rng_seed), run.rng_seed)
+		_node_cfg_for(run.current_chapter, node_type, node_id, run.rng_seed), run.rng_seed)
 	if reward != null and not run.unlocked_techniques.has(reward):
 		run.unlocked_techniques.append(reward)
 

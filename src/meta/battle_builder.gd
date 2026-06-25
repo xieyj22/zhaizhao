@@ -23,7 +23,7 @@ static func build(run: RunState, node_cfg: Dictionary) -> BattleState:
 	else:
 		var enemies: Array = node_cfg.get("enemies", [])
 		if enemies.is_empty() and node_cfg.has("node_type"):
-			var ec: Dictionary = EnemyPool.pick(String(node_cfg["node_type"]), int(node_cfg.get("risk", 0)), run.rng_seed)
+			var ec: Dictionary = EnemyPool.pick(run.current_chapter, String(node_cfg["node_type"]), int(node_cfg.get("risk", 0)), run.rng_seed)
 			enemies = ec["enemies"]
 		for ed in enemies:
 			units.append(_unit_from_enemy(ed))
