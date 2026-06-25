@@ -24,18 +24,17 @@ class RunResult:
 ## 跑一整局（章 1 完整 loop：hub→map 节点链→章末 boss）。
 ## player_personality = team0（玩家方）AI 性格；敌方性格按 node_cfg。
 ## 章 2-4 未实装，章 1 boss 胜即"cleared"。
-static func run_one(meta: MetaState, seed: int, player_personality: AIPersonality) -> RunResult:
+## auto_recruit=true 时开局限招募可招派系队友（复刻玩家 hub 招募，让整局更真实）。
+static func run_one(meta: MetaState, seed: int, player_personality: AIPersonality, auto_recruit := true) -> RunResult:
 	var res := RunResult.new()
 	res.seed_used = seed
 	var run := RunFactory.init_run(meta, seed)
 	res.modifier_ids = RunModifier.roll(seed)
+	if auto_recruit:
+		_auto_recruit(run)   # 开局招满可招派系（roster_cap - 1），模拟玩家在 hub 招募
 	RunFlow.place_at_chapter_start(run)
 
 	var tuning := _tuning_for(run)
-	# player_roster 预建 PlayerModel（按单位 id）；敌方每场临时建模玩家方
-	var pm_player := PlayerModel.new()   # 玩家方建模敌方？反向——这里 pm 观察敌方供玩家 AI 决策
-	# TurnOrchestrator(player_model, ai_team)：ai_team=1 → orch 观察 team0 进 player_model
-	# 玩家方(team0)由 AI 驱动，决策时需读 team1 模型 → 用第二个 PlayerModel，手动 observe team1
 
 	const MAX_NODES := 64   # 防 DAG 异常无限走（章 1 约 8 层，64 足够兜底）
 	var steps := 0
@@ -64,15 +63,33 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 		var ty: String = String(m["nodes"][target].get("type", "start"))
 		match ty:
 			"boss","duel","sparring","hazard":
-				_fight_battle(run, ty, target, tuning, player_personality, pm_player, res)
+				_fight_battle(run, ty, target, tuning, player_personality, meta, res)
 			"visit","escort":
-				_grant_unlock(run, ty, target)
+				_grant_unlock(run, ty, target, meta.meta_unlocked_pool)
 			"start","_":
 				pass   # 起点节点无事件
 	# 超步兜底
 	res.outcome = "stalled"
 	res.chapter_reached = run.current_chapter
 	return res
+
+## 开局限招募：模拟玩家在 hub 招满可招派系（受 roster_cap 限），让整局含多队友。
+static func _auto_recruit(run: RunState) -> void:
+	# roster_cap 复刻 hub._can_recruit（默认 3，「独行」modifier 覆盖）
+	var cap := 3
+	if run.modifier_state.has("roster_cap"):
+		cap = int(run.modifier_state["roster_cap"])
+	while run.player_roster.size() < cap:
+		var recruited := false
+		for fid in FactionData.recruit_factions():
+			if FactionRelations.can_recruit(run.faction_relations, fid):
+				var idx: int = run.player_roster.size()
+				if idx < FactionData.PLAYER_SLOTS.size():
+					run.player_roster.append(RunFactory._ally(fid, idx))
+					recruited = true
+					break   # 每轮招一个，重判 cap/槽位
+		if not recruited:
+			break   # 无可招派系则停
 
 ## 选下一节点：boss 在可达中且本章未通关 → 走 boss；否则首个可达。
 static func _pick_next_node(m: Dictionary, reachable: Array) -> String:
@@ -93,17 +110,18 @@ static func _tuning_for(run: RunState) -> Tuning:
 
 ## 跑一场战斗（双 AI：team0=玩家性格，team1=节点敌人性格）。
 ## 复刻 battle.gd 的 BattleBuilder 构造 + playtest_harness 的回合循环 + battle.gd 的回写。
+## pm_player 每场重建（复刻 battle.gd:50 每场 new PlayerModel——防跨战斗观察污染）。
 static func _fight_battle(run: RunState, node_type: String, node_id: String,
 		tuning: Tuning, player_personality: AIPersonality,
-		pm_player: PlayerModel, res: RunResult) -> void:
+		meta: MetaState, res: RunResult) -> void:
 	var node_cfg: Dictionary = _node_cfg_for(node_type, node_id, run.rng_seed)
 	var s := BattleBuilder.build(run, node_cfg)
-	# 敌方性格（boss→brute；否则 node_cfg.personality 或 brain）
+	# 敌方性格（boss→brute；否则读 node_cfg.personality——由 EnemyPool 组合带出）
 	var enemy_personality := _enemy_personality_for(node_cfg)
-	# TurnOrchestrator(player_model, ai_team=1)：观察 team0（玩家）进 pm_enemy 供敌方决策
+	# 每场重建 player_model（复刻 battle.gd；旧实现跨战斗累积污染预测）
+	var pm_player := PlayerModel.new()
 	var pm_enemy := PlayerModel.new()
 	var orch := TurnOrchestrator.new(s, tuning, pm_enemy, 1)
-	# 玩家方决策需建模敌方 → 手动 observe team1 进 pm_player（每回合后）
 
 	# kit lookup（AIController.choose_actions 需要 kits dict）
 	var kits: Dictionary = {}
@@ -139,34 +157,50 @@ static func _fight_battle(run: RunState, node_type: String, node_id: String,
 			pd["opening"] = u.opening
 			pd["guard_broken"] = u.guard_broken
 			run.player_roster[i] = pd
+	# 剔除死亡队友（复刻 battle.gd：调 RunFlow.cull_dead_allies，保 roster 紧凑）
+	RunFlow.cull_dead_allies(run)
 
 	res.battles_fought += 1
 	res.total_battle_turns += turns
-	# boss 胜 → 标记本章 boss 已败（章末通关条件）
+	# boss 结果：TEAM0_WIN→通关推进；DRAW→单独 outcome（旧实现误并入 stalled）
 	var oc := s.outcome(tuning)
-	if node_type == "boss" and oc == BattleState.Outcome.TEAM0_WIN:
-		RunFlow.on_boss_defeated(run)
-		res.bosses_defeated += 1
+	if node_type == "boss":
+		match oc:
+			BattleState.Outcome.TEAM0_WIN:
+				RunFlow.on_boss_defeated(run)
+				res.bosses_defeated += 1
+			BattleState.Outcome.DRAW:
+				res.outcome = "boss_draw"   # boss 平局：未通关未死，暴露为独立 outcome
+				res.chapter_reached = run.current_chapter
+			# TEAM1_WIN：主角若死由下轮 is_run_over 捕获；主角活则 stalled（boss 邻接为空）
 
-## node_cfg 构造（复刻 map.gd._node_cfg_for；boss 固定 hailianzheng，其余靠 EnemyPool）。
+## node_cfg 构造：boss 固定 hailianzheng；非 boss 主动 EnemyPool.pick 取组合（带 personality + risk），
+## 让 BattleBuilder 用显式 enemies（不二次 pick）+ _enemy_personality_for 读组合性格。
 static func _node_cfg_for(node_type: String, node_id: String, rng_seed: int) -> Dictionary:
 	if node_type == "boss":
 		return {"boss_id":"hailianzheng","node_type":"boss"}
-	# 非 boss：BattleBuilder 在 enemies 空 + 有 node_type 时自动从 EnemyPool.pick 抽
-	return {"node_type":node_type, "risk":1 if node_type == "hazard" else 0}
+	# 非 boss：主动抽组合，把 enemies + personality 显式带进 node_cfg
+	var risk: int = 1 if node_type == "hazard" else 0
+	var combo: Dictionary = EnemyPool.pick(node_type, risk, rng_seed)
+	return {
+		"node_type": node_type,
+		"risk": risk,
+		"personality": String(combo.get("personality", "brain")),
+		"enemies": combo.get("enemies", []),
+	}
 
-## 敌方性格（复刻 battle.gd._personality_for）。
+## 敌方性格（boss→brute；否则读 node_cfg.personality——由 EnemyPool 组合带出，复刻 battle.gd._personality_for）。
 static func _enemy_personality_for(node_cfg: Dictionary) -> AIPersonality:
 	if node_cfg.has("boss_id"):
 		return AIPersonality.brute()
-	# 非 boss：BattleBuilder 已用 EnemyPool 抽了 enemies，但性格在 enemy dict 里；
-	# harness 这里简化用 brain（EnemyPool 各组合 personality 在 build 时进 UnitState？否——
-	# UnitState 无 personality 字段；敌方 AI 性格此处统一取 brain，M4 可按 enemy_pool 组合细化）
-	return AIPersonality.brain()
+	var p: String = String(node_cfg.get("personality", "brain"))
+	match p:
+		"brute": return AIPersonality.brute()
+		"trick": return AIPersonality.trick()
+		_: return AIPersonality.brain()
 
-## visit/escort 节点：roll 解锁招加进 unlocked（复刻 map.gd:62-64）。
-static func _grant_unlock(run: RunState, node_type: String, node_id: String) -> void:
-	var meta_pool := []   # harness 无 meta_state 上下文，传空池（roll 仍能给奖励）
+## visit/escort 节点：roll 解锁招加进 unlocked（复刻 map.gd:62-64，传真实 meta_pool）。
+static func _grant_unlock(run: RunState, node_type: String, node_id: String, meta_pool: Array) -> void:
 	var reward: Variant = UnlockRules.roll_unlock_reward(meta_pool, node_type,
 		_node_cfg_for(node_type, node_id, run.rng_seed), run.rng_seed)
 	if reward != null and not run.unlocked_techniques.has(reward):
@@ -184,12 +218,15 @@ class SeriesStats:
 	var runs: int = 0
 	var cleared: int = 0
 	var protagonist_dead: int = 0
+	var boss_draw: int = 0
 	var stalled: int = 0
 	var total_battles: int = 0
 	func clear_rate() -> float:
 		return float(cleared) / float(maxi(1, runs))
 	func death_rate() -> float:
 		return float(protagonist_dead) / float(maxi(1, runs))
+	func draw_rate() -> float:
+		return float(boss_draw) / float(maxi(1, runs))
 
 static func run_series(meta: MetaState, n_runs: int, player_personality: AIPersonality, seed_base := 1) -> SeriesStats:
 	var st := SeriesStats.new()
@@ -200,5 +237,6 @@ static func run_series(meta: MetaState, n_runs: int, player_personality: AIPerso
 		match r.outcome:
 			"cleared": st.cleared += 1
 			"protagonist_dead": st.protagonist_dead += 1
+			"boss_draw": st.boss_draw += 1
 			_: st.stalled += 1
 	return st

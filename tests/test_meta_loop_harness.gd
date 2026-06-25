@@ -7,7 +7,7 @@ func test_run_one_terminates_with_valid_outcome():
 	# 固定 seed 跑一局：必须终止（不无限循环），outcome ∈ {cleared, protagonist_dead, stalled}
 	var meta := MetaState.new_first_play()
 	var res := MetaLoopHarness.run_one(meta, 7, AIPersonality.brain())
-	var valid_outcomes: Array = ["cleared", "protagonist_dead", "stalled"]
+	var valid_outcomes: Array = ["cleared", "protagonist_dead", "boss_draw", "stalled"]
 	assert_true(valid_outcomes.has(res.outcome), "outcome 合法: %s" % res.outcome)
 	assert_eq(res.chapter_reached, 1, "章 2-4 未实装，止于章 1")
 	assert_true(res.battles_fought >= 0, "战斗场次非负")
@@ -21,6 +21,18 @@ func test_run_one_deterministic_same_seed():
 	assert_eq(r1.battles_fought, r2.battles_fought, "同 seed 同战斗场次")
 	assert_eq(r1.bosses_defeated, r2.bosses_defeated, "同 seed 同 boss 击败数")
 
+func test_run_one_auto_recruits_allies():
+	# 保真度：开局 auto_recruit 招满可招派系（F4 初始 40≥30 可招）→ roster >1
+	# 用 init_run 直接看招募效果（run_one 内部调 _auto_recruit，这里测其可观测：同 seed 跑出的 run
+	# 因多队友而与 auto_recruit=false 不同——验 auto_recruit 开关改变行为）
+	var meta := MetaState.new_first_play()
+	var with_recruit := MetaLoopHarness.run_one(meta, 7, AIPersonality.brain(), true)
+	var no_recruit := MetaLoopHarness.run_one(meta, 7, AIPersonality.brain(), false)
+	# 招募与否应影响整局（战斗场次/outcome 至少其一不同，因队友增伤）——不强求方向，仅证开关生效
+	var differs: bool = with_recruit.battles_fought != no_recruit.battles_fought \
+		or with_recruit.outcome != no_recruit.outcome
+	assert_true(differs, "auto_recruit 开关改变整局行为（队友参战）")
+
 func test_run_one_does_not_loop_forever():
 	# 多 seed 都能终止（防 DAG 卡死/permadeath 漏判导致无限走）
 	var meta := MetaState.new_first_play()
@@ -33,7 +45,7 @@ func test_run_series_aggregates():
 	var meta := MetaState.new_first_play()
 	var st := MetaLoopHarness.run_series(meta, 5, AIPersonality.brain())
 	assert_eq(st.runs, 5, "跑了 5 局")
-	assert_eq(st.cleared + st.protagonist_dead + st.stalled, st.runs, "三类 outcome 之和 == runs")
+	assert_eq(st.cleared + st.protagonist_dead + st.boss_draw + st.stalled, st.runs, "四类 outcome 之和 == runs")
 
 func test_run_one_protagonist_death_possible():
 	# 弱玩家（trick 性格对 boss brute 不利）跑多 seed，至少应能跑完不崩；

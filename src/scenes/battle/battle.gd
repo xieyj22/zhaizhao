@@ -52,6 +52,7 @@ func _ready() -> void:
 
 	view = BattleView.new()
 	view.cell = CELL; view.grid_size = GRID; view.state = state
+	view.reduce_motion = MetaSession.reduce_motion   # 跨战斗持久（a11y）
 	add_child(view)
 
 	_build_ui()
@@ -166,11 +167,14 @@ func _refresh() -> void:
 	view.queue_redraw()
 
 ## M 键切换简洁动效（reduce_motion：破绽脉冲/受击闪白/飘字动画/HP lerp 降级或静化）。
-## a11y 收尾——动效敏感用户。本局内存态（不落盘）。
+## a11y 收尾——动效敏感用户。态存 MetaSession 跨战斗持久（不落盘）。
 func _unhandled_input(event: InputEvent) -> void:
+	if game_over:
+		return   # 战斗结束后不重建 UI（防残留 picker）
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_M:
-			view.reduce_motion = not view.reduce_motion
+			MetaSession.reduce_motion = not MetaSession.reduce_motion
+			view.reduce_motion = MetaSession.reduce_motion
 			_refresh()
 
 func _player_can_pick(u: UnitState, tech: Technique) -> bool:
@@ -268,6 +272,8 @@ func _write_back_result(outcome: int) -> void:
 			pd["opening"] = u.opening
 			pd["guard_broken"] = u.guard_broken
 			run.player_roster[i] = pd
+	# 剔除死亡非主角队友（修 roster 泄漏：否则幽灵占满 roster_cap 无法再招）
+	RunFlow.cull_dead_allies(run)
 	MetaSession.last_battle_outcome = outcome
 
 static func _find_unit(s: BattleState, id_str: String) -> UnitState:

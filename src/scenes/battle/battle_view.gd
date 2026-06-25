@@ -129,6 +129,7 @@ func _draw() -> void:
 		var c: Color = f.color
 		if not bool(f.get("static", false)):
 			y -= progress * 28.0      # 上浮
-			c.a = 1.0 - progress       # 淡出
-		# static(reduce_motion): 停在原位，alpha 随寿命末尾淡（信息保留更久）
+		# static 与非 static 都随寿命淡出（避免硬切闪烁——突变也是 motion 刺激）；
+		# reduce_motion(static) 仅省上浮动效，alpha 淡出保留（信息随末尾渐隐）
+		c.a = 1.0 - progress
 		draw_string(ThemeDB.fallback_font, Vector2(f.pos.x, y), f.text, HORIZONTAL_ALIGNMENT_CENTER, -1, f.size, c)

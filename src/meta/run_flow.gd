@@ -45,6 +45,17 @@ static func is_run_over(run: RunState) -> bool:
 			return not bool(pd.get("alive", true))
 	return false   # 无主角（不应发生）→ 不结束
 
+## 剔除死亡的非主角队友（战斗后回写调用）。
+## 修 bug：死亡队友若留 roster，_can_recruit 按 size() 计数会被幽灵占满 cap（无法再招），
+## 且 _on_recruit_faction 的 idx=roster.size() 会与旧死亡队友 id 冲突致回写错位。
+## 主角（无论死活）保留——主角死由 is_run_over/commit_run_to_meta 处理，需 roster 可判定。
+static func cull_dead_allies(run: RunState) -> void:
+	var alive_roster: Array = []
+	for pd in run.player_roster:
+		if bool(pd.get("is_protagonist", false)) or bool(pd.get("alive", true)):
+			alive_roster.append(pd)
+	run.player_roster = alive_roster
+
 ## 进入章节图：若 current_node_id 为空（在 hub），定位到当前章 L0 起点节点。
 ## 幂等——已在某节点时（如战斗后返回 map）不动。map 场景 _ready 调用。
 ## 修 bug：init_run 设 current_node_id="" 进 map 后 can_advance_node 全 false（无边 from=""）→ 节点全 disabled。

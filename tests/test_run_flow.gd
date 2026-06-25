@@ -85,3 +85,36 @@ func test_is_run_over_protagonist_dead_ally_alive():
 	run.player_roster[0]["alive"] = false   # 主角死
 	run.player_roster[1]["alive"] = true    # 队友活
 	assert_true(RunFlow.is_run_over(run), "主角死 → 局结束（无视队友存活）")
+
+# —— 死亡队友剔除（修 bug：死亡队友永久占 roster 致 cap 被幽灵偷）——
+
+func test_cull_dead_allies_removes_dead_keeps_protagonist_and_alive():
+	# 死亡非主角队友剔除；主角（无论死活，主角死由 is_run_over/commit 处理）与存活队友保留
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.player_roster.append(RunFactory._ally("F4", 1))   # 存活队友
+	run.player_roster.append(RunFactory._ally("F2", 2))   # 将死的队友
+	run.player_roster[2]["alive"] = false
+	RunFlow.cull_dead_allies(run)
+	assert_eq(run.player_roster.size(), 2, "死亡队友被剔除")
+	assert_eq(run.player_roster[0]["id"], "protagonist", "主角保留")
+	assert_eq(run.player_roster[1]["id"], "ally_F4_1", "存活队友保留")
+
+func test_cull_dead_allies_frees_slot_for_re_recruit():
+	# 修 bug 核心场景：队友死后回 hub，roster_cap 不被幽灵占，可再招
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.player_roster.append(RunFactory._ally("F4", 1))
+	run.player_roster[1]["alive"] = false   # 队友死
+	RunFlow.cull_dead_allies(run)
+	assert_eq(run.player_roster.size(), 1, "死亡队友剔除后 roster 回到 1（主角）")
+	# 再招：idx 应=1（首个空槽），不与旧死亡队友的 ally_F4_1 id 冲突
+	var idx: int = run.player_roster.size()
+	run.player_roster.append(RunFactory._ally("F2", idx))
+	assert_eq(run.player_roster[1]["id"], "ally_F2_1", "新队友 id 不与旧死亡队友冲突")
+
+func test_cull_dead_allies_keeps_dead_protagonist():
+	# 主角死不剔除（permadeath 由 commit_run_to_meta/is_run_over 处理，roster 保留供判定）
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.player_roster[0]["alive"] = false   # 主角死
+	RunFlow.cull_dead_allies(run)
+	assert_eq(run.player_roster.size(), 1, "主角（死）保留——供 is_run_over 判定")
+	assert_true(RunFlow.is_run_over(run), "主角死 → 局结束（cull 后仍可判）")
