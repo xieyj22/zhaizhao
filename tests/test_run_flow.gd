@@ -18,14 +18,72 @@ func test_can_advance_node_only_along_edges():
 	assert_false(RunFlow.can_advance_node(run, "n9_9"), "非邻接不可走")
 
 func test_cannot_advance_chapter_before_boss():
+	# M4 迁移：boss_defeated:bool → bosses_defeated:Array（空 = 未败）
 	var run := _run()
-	run.chapter_progress[1]["boss_defeated"] = false
+	run.chapter_progress[1]["bosses_defeated"] = []
 	assert_false(RunFlow.can_advance_chapter(run), "boss 未败不可进下章")
 
 func test_can_advance_chapter_after_boss():
+	# M4 迁移：on_boss_defeated(run, boss_id) append boss id
 	var run := _run()
-	RunFlow.on_boss_defeated(run)
+	RunFlow.on_boss_defeated(run, "hailianzheng")
 	assert_true(RunFlow.can_advance_chapter(run), "boss 败后可进下章")
+	assert_eq(run.chapter_progress[1]["bosses_defeated"], ["hailianzheng"], "记录 boss id")
+
+# —— M4 T5: bosses_defeated 记录 boss_id ——
+func test_bosses_defeated_records_boss_id():
+	var run := _run()
+	run.chapter_progress[1]["bosses_defeated"] = []
+	RunFlow.on_boss_defeated(run, "hailianzheng")
+	assert_eq(run.chapter_progress[1]["bosses_defeated"], ["hailianzheng"])
+
+func test_bosses_defeated_dedup():
+	# 同 boss id 多次记录只留一份（去重）
+	var run := _run()
+	run.chapter_progress[1]["bosses_defeated"] = []
+	RunFlow.on_boss_defeated(run, "hailianzheng")
+	RunFlow.on_boss_defeated(run, "hailianzheng")
+	assert_eq(run.chapter_progress[1]["bosses_defeated"], ["hailianzheng"], "重复 boss id 去重")
+
+func test_can_advance_chapter_any_l7_boss():
+	# 章2：打通莫青娘或晏九任一即可
+	var run := _run()
+	run.current_chapter = 2
+	run.chapter_maps[2] = MapGenerator.generate_map(7, 2, 0)
+	run.chapter_progress[2] = {"bosses_defeated": []}
+	assert_false(RunFlow.can_advance_chapter(run), "章2 boss 均未败不可推进")
+	RunFlow.on_boss_defeated(run, "moqingniang")
+	assert_true(RunFlow.can_advance_chapter(run), "章2 任一 boss 胜→可推进")
+
+func test_can_advance_chapter_chapter4_requires_yanwujiu():
+	# 章4：L6 mini-boss（sikongyi/leiwanjun）不算，必须 L7 掌门 yanwujiu
+	var run := _run()
+	run.current_chapter = 4
+	run.chapter_maps[4] = MapGenerator.generate_map(7, 4, 0)
+	run.chapter_progress[4] = {"bosses_defeated": []}
+	assert_false(RunFlow.can_advance_chapter(run), "章4 掌门未败不可推进")
+	RunFlow.on_boss_defeated(run, "sikongyi")   # L6 mini-boss
+	assert_false(RunFlow.can_advance_chapter(run), "章4 mini-boss 胜仍不可推进（需掌门）")
+	RunFlow.on_boss_defeated(run, "yanwujiu")
+	assert_true(RunFlow.can_advance_chapter(run), "章4 掌门颜无咎胜→可推进")
+
+func test_advance_chapter_generates_next_map():
+	var run := _run()
+	run.current_chapter = 1
+	run.chapter_progress[1]["bosses_defeated"] = ["hailianzheng"]
+	RunFlow.advance_chapter(run)
+	assert_eq(run.current_chapter, 2, "current_chapter+1")
+	assert_true(run.chapter_maps.has(2), "章2 图已生成")
+	assert_eq(run.chapter_progress[2]["bosses_defeated"], [], "章2 progress 初始化空")
+	assert_eq(run.current_node_id, "", "进新章回 hub 定位（空 = hub）")
+
+func test_chapter1_boss_flow_still_works():
+	# 章1 兼容：on_boss_defeated(hailianzheng) → can_advance
+	var run := _run()
+	run.chapter_progress[1]["bosses_defeated"] = []
+	assert_false(RunFlow.can_advance_chapter(run))
+	RunFlow.on_boss_defeated(run, "hailianzheng")
+	assert_true(RunFlow.can_advance_chapter(run), "章1 赫连铮胜→可推进")
 
 func test_enter_node_updates_current_and_log():
 	var run := _run()

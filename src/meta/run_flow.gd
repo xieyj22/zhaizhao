@@ -2,7 +2,7 @@ class_name RunFlow
 extends RefCounted
 
 ## run 状态机（T4 §7.4 不变量 114–115）。
-## 节点按 DAG 边前进；章节间需 boss_defeated。纯函数，无副作用外溢。
+## 节点按 DAG 边前进；章节间需 bosses_defeated 含当章通关 boss（M4 T5）。纯函数，无副作用外溢。
 
 ## 判定能否从当前节点前进到 target（T4 §7.4 不变量 114：仅沿 DAG 边）。
 static func can_advance_node(run: RunState, target_node_id: String) -> bool:
@@ -15,7 +15,7 @@ static func can_advance_node(run: RunState, target_node_id: String) -> bool:
 static func enter_node(run: RunState, target_node_id: String) -> void:
 	run.current_node_id = target_node_id
 	var cp: Dictionary = run.chapter_progress.get(
-		run.current_chapter, {"boss_defeated": false, "nodes_visited": []}
+		run.current_chapter, {"bosses_defeated": [], "nodes_visited": []}
 	)
 	(cp["nodes_visited"] as Array).append(target_node_id)
 	run.chapter_progress[run.current_chapter] = cp
@@ -25,17 +25,74 @@ static func enter_node(run: RunState, target_node_id: String) -> void:
 	)
 
 ## 判定能否进入下一章（T4 §7.4 不变量 115：当前章 boss 必须已败）。
+## M4 T5：章1-3 任一 L7 boss 败即可；章4 必须掌门 yanwujiu（L6 mini-boss 不算）。
 static func can_advance_chapter(run: RunState) -> bool:
-	var cp: Dictionary = run.chapter_progress.get(run.current_chapter, {})
-	return cp.get("boss_defeated", false)
-
-## 标记当前章 boss 已败。
-static func on_boss_defeated(run: RunState) -> void:
 	var cp: Dictionary = run.chapter_progress.get(
-		run.current_chapter, {"boss_defeated": false, "nodes_visited": []}
+		run.current_chapter, {"bosses_defeated": [], "nodes_visited": []}
 	)
-	cp["boss_defeated"] = true
+	var defeated: Array = cp.get("bosses_defeated", [])
+	var required: Array = _required_boss_ids(run.current_chapter)
+	for bid in required:
+		if defeated.has(bid):
+			return true
+	return false   # required 空（不应发生）或均未败 → false
+
+## 当章通关所需 boss id 列表。章1-3 = BossConfig.boss_ids_for(ch, 7)；
+## 章4 仅 yanwujiu（L6 mini-boss sikongyi/leiwanjun 不算通关）。
+static func _required_boss_ids(chapter: int) -> Array:
+	if chapter == 4:
+		return ["yanwujiu"]
+	return BossConfig.boss_ids_for(chapter, 7)
+
+## 标记当前章某 boss 已败，记入 bosses_defeated（去重）。
+## boss_id 可省略：旧调用者（battle.gd / playtest harness）不传时，
+## 从当前章图的 boss 节点 boss_id 字段推导（章1 无 boss_id 字段→取 BossConfig L7 列表首项）。
+static func on_boss_defeated(run: RunState, boss_id: String = "") -> void:
+	var bid: String = boss_id
+	if bid == "":
+		bid = _infer_boss_id(run)
+	var cp: Dictionary = run.chapter_progress.get(
+		run.current_chapter, {"bosses_defeated": [], "nodes_visited": []}
+	)
+	var arr: Array = cp.get("bosses_defeated", [])
+	if not arr.has(bid):
+		(arr as Array).append(bid)
+	cp["bosses_defeated"] = arr
 	run.chapter_progress[run.current_chapter] = cp
+
+## 从当前章图 current_node_id 的 boss 节点推导 boss_id（旧调用者回退路径）。
+## 章1 boss 节点无 boss_id 字段（M3 语义）→ 取 BossConfig L7 列表首项（hailianzheng）。
+static func _infer_boss_id(run: RunState) -> String:
+	if not run.chapter_maps.has(run.current_chapter):
+		return ""
+	var m: Dictionary = run.chapter_maps[run.current_chapter]
+	var node_id: String = run.current_node_id
+	if node_id != "" and m["nodes"].has(node_id):
+		var nd: Dictionary = m["nodes"][node_id]
+		if String(nd.get("type", "")) == "boss":
+			var bid: String = String(nd.get("boss_id", ""))
+			if bid != "":
+				return bid
+	# 当前节点非 boss 或无 boss_id（章1）→ 取该章 L7 首项
+	var l7: Array = BossConfig.boss_ids_for(run.current_chapter, 7)
+	if not l7.is_empty():
+		return String(l7[0])
+	return ""
+
+## 推进到下一章（章 N → N+1）。在 can_advance_chapter 为 true 后由调用方触发。
+## 语义：current_chapter+=1；生成下一章图；初始化章 progress；current_node_id 置空（回 hub）。
+## 纯函数改 run，不持久化（调用方负责 commit）。
+static func advance_chapter(run: RunState) -> void:
+	var next_chapter: int = run.current_chapter + 1
+	# 章节种子派生与 generate_map 内部一致；hazard_delta 取该 run 的 modifier 态
+	var hazard_delta: int = int(run.modifier_state.get("hazard_node_count_delta", 0))
+	var next_map: Dictionary = MapGenerator.generate_map(
+		run.rng_seed, next_chapter, hazard_delta
+	)
+	run.chapter_maps[next_chapter] = next_map
+	run.chapter_progress[next_chapter] = {"bosses_defeated": [], "nodes_visited": []}
+	run.current_chapter = next_chapter
+	run.current_node_id = ""   # 进新章回 hub（map 场景 _ready 调 place_at_chapter_start 重定位）
 
 ## permadeath：主角死 = 局结束（T4 §7.1：主角死亡→单 run 结束，meta 保留→回 hub）。
 ## battle.gd 战斗后据此判定回 hub（commit meta）还是回 map（继续）。

@@ -14,7 +14,7 @@ var hazard_modifiers: Dictionary = {}      # 当前险地修饰符（空=无）
 var faction_relations: Dictionary = {}     # {faction_id: int}
 var jianghu_credit: int = 0
 var inheritance_slot: Dictionary = {}      # {}=无；{type,id}
-var chapter_progress: Dictionary = {}      # {chapter_int:{boss_defeated,nodes_visited}}
+var chapter_progress: Dictionary = {}      # {chapter_int:{bosses_defeated:Array,nodes_visited:Array}}
 var run_log: Array = []
 ## —— M3.5: 局 modifier 解析后的 effect（按 hook 分组）；空 = 无 modifier ——
 var modifier_state: Dictionary = {}

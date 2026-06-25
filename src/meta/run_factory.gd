@@ -22,7 +22,7 @@ static func init_run(meta: MetaState, seed: int) -> RunState:
 	# 章 1 起点图（传 hazard_delta，init 期消费；险地数在 generate_map 调用时定型，事后不可改）
 	var hazard_delta: int = int(r.modifier_state.get("hazard_node_count_delta", 0))
 	r.chapter_maps = {1: MapGenerator.generate_map(seed, 1, hazard_delta)}
-	r.chapter_progress = {1: {"boss_defeated": false, "nodes_visited": []}}
+	r.chapter_progress = {1: {"bosses_defeated": [], "nodes_visited": []}}
 	# —— M3.5: 消费 init 期 hook（relation/hp）——
 	apply_init_hooks(r, meta)
 	# jianghu_credit / inheritance_slot / technique_variants / hazard_modifiers / run_log
