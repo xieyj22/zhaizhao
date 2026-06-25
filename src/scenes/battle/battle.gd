@@ -65,11 +65,14 @@ func _mk(id, team, pos, stance) -> UnitState:
 	u.hp = 20; u.max_hp = 20
 	return u
 
-## node_cfg → 敌方性格（boss→brute；否则按 personality 字段）。
+## node_cfg → 敌方性格（boss 查 BOSS_CONFIG.personality；否则按 node_cfg.personality 字段，默认 brain）。
 static func _personality_for(node_cfg: Dictionary) -> AIPersonality:
+	var p: String = "brain"
 	if node_cfg.has("boss_id"):
-		return AIPersonality.brute()   # 章 1 boss 赫连铮 brute
-	var p: String = node_cfg.get("personality", "brain")
+		var cfg: Dictionary = BossConfig.get_boss(String(node_cfg["boss_id"]))
+		p = String(cfg.get("personality", "brute"))
+	else:
+		p = String(node_cfg.get("personality", "brain"))
 	match p:
 		"brute": return AIPersonality.brute()
 		"trick": return AIPersonality.trick()
