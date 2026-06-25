@@ -17,6 +17,15 @@ func test_trick_feints():
 	assert_gt(p.feint_rate, 0.5, "诡将高虚招率")
 	assert_gt(p.w_predict_mul, 0.0)
 
+func test_brain_trick_hybrid_weights():
+	var p := AIPersonality.brain_trick_hybrid()
+	assert_eq(p.display_name, "智诡合一")
+	assert_eq(p.w_predict_mul, 2.0, "brain 的读招")
+	assert_eq(p.feint_rate, 0.7, "trick 的虚招")
+	assert_eq(p.aggression, 1.2)
+	assert_eq(p.caution, 1.0)
+	assert_eq(p.top_n_mul, 1.1)
+
 func test_defaults_present():
 	var p := AIPersonality.new()
 	assert_eq(p.w_predict_mul, 1.0)

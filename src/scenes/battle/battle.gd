@@ -73,6 +73,7 @@ static func _personality_for(node_cfg: Dictionary) -> AIPersonality:
 	match p:
 		"brute": return AIPersonality.brute()
 		"trick": return AIPersonality.trick()
+		"brain_trick_hybrid": return AIPersonality.brain_trick_hybrid()
 		_: return AIPersonality.brain()
 
 # ---------- UI ----------

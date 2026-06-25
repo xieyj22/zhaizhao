@@ -42,3 +42,14 @@ static func trick() -> AIPersonality:
 	p.caution = 1.0
 	p.top_n_mul = 1.2
 	return p
+
+## 智诡合一（掌门颜无咎，product §5.3）：brain 的读招 + trick 的虚招合一
+static func brain_trick_hybrid() -> AIPersonality:
+	var p := AIPersonality.new()
+	p.display_name = "智诡合一"
+	p.w_predict_mul = 2.0
+	p.feint_rate = 0.7
+	p.aggression = 1.2
+	p.caution = 1.0
+	p.top_n_mul = 1.1
+	return p
