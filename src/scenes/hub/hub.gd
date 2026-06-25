@@ -33,7 +33,7 @@ func _build_ui() -> void:
 	_btn_recruit.disabled = not _can_recruit()
 	_btn_recruit.pressed.connect(_on_recruit_placeholder)
 	root.add_child(_btn_recruit)
-	_recruit_panel = VBoxContainer()
+	_recruit_panel = VBoxContainer.new()
 	_recruit_panel.visible = false
 	root.add_child(_recruit_panel)
 
