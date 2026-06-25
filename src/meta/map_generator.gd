@@ -29,6 +29,11 @@ const _MIN_COUNTS := {"duel": 4, "sparring": 2, "visit": 1, "hazard": 1, "escort
 ## hazard_delta: 险地数量增量（默认 0 = M3 行为；>0 在 M3 baseline 之上
 ## 额外把 hazard_delta 个可转换节点改为 hazard）。边界守护：delta=0 时
 ## 类型分配与 M3 逐字节一致（仅 hazard 节点多出 additive 的 reward_tier 字段）。
+##
+## M4 多 boss（章1逐字节不变）：
+##   章1：L7 单 boss（M3 原逻辑路径，无 boss_id 字段）
+##   章2/3：L7 = 2 boss 节点（玩家路径二选一），boss_id 标注
+##   章4：L6 = 2 mini-boss + L7 = 1 掌门
 static func generate_map(p_seed: int, chapter: int, hazard_delta: int = 0) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	# 章节种子派生（确定性）：不同 (seed,chapter) → 不同但可复现的 RNG 流
@@ -37,6 +42,18 @@ static func generate_map(p_seed: int, chapter: int, hazard_delta: int = 0) -> Di
 	var per_layer := {0: 1, 7: 1}
 	for l in range(1, 7):
 		per_layer[l] = 2 + (rng.randi() % 2)   # 2 或 3
+
+	# M4 多 boss：per_layer[7] 按章（章1=1 / 章2,3=2 / 章4=1）；
+	# 章4 L6 强制至少 2 节点（mini-boss 占位）。
+	# 关键：章1 不改 per_layer（保 RNG 流与 M3 一致），per_layer[7] 本已是 1。
+	var is_multi_boss := chapter != 1
+	if is_multi_boss:
+		if chapter in [2, 3]:
+			per_layer[7] = 2
+		else:
+			per_layer[7] = 1   # 章4 L7 单掌门
+		if chapter == 4:
+			per_layer[6] = maxi(per_layer[6], 2)   # L6 mini-boss 至少 2 槽
 
 	var nodes := {}
 	var layer_ids := {}
@@ -48,7 +65,11 @@ static func generate_map(p_seed: int, chapter: int, hazard_delta: int = 0) -> Di
 			layer_ids[l].append(id)
 
 	nodes[layer_ids[0][0]]["type"] = "start"
-	nodes[layer_ids[7][0]]["type"] = "boss"
+	# boss 节点标注：章1 走原逻辑（type=boss，无 boss_id）；他章走 _assign_boss_nodes
+	if is_multi_boss:
+		_assign_boss_nodes(nodes, layer_ids, chapter)
+	else:
+		nodes[layer_ids[7][0]]["type"] = "boss"
 
 	# baseline 类型分配：始终用原始 _MIN_COUNTS（hazard 下限 1），
 	# 保证 delta=0 与 M3 逐字节一致。
@@ -67,11 +88,38 @@ static func generate_map(p_seed: int, chapter: int, hazard_delta: int = 0) -> Di
 	# 险径保证：若无"相邻层都有 hazard"，补一条（delta=0 下 160 代均天然满足，故为 no-op）
 	_ensure_peril_path(nodes, layer_ids, rng)
 
-	var edges := _build_edges(layer_ids, rng)
+	var edges := _build_edges(layer_ids, rng, chapter)
 	return {"nodes": nodes, "edges": edges, "seed": p_seed, "chapter": chapter}
 
 
 # --- 类型分配 -------------------------------------------------------------
+
+# M4 boss 节点标注。在 _assign_types 之前调用：把 L7/L6 的 boss 槽预先标 type="boss"
+# + boss_id，使 _assign_types 的候选 slots 自动跳过这些槽（type != ""）。
+#
+# 章2/3：L7 = 2 boss（moqingniang/yanjiu 或 zongzhenglie/peiyuan）
+# 章4：L6 = 2 mini-boss（sikongyi/leiwanjun）+ L7 = 1 掌门（yanwujiu）
+# boss_ids 顺序与 BossConfig.boss_ids_for 返回顺序一致（BOSS_CONFIG 字典插入序）。
+static func _assign_boss_nodes(nodes: Dictionary, layer_ids: Dictionary, chapter: int) -> void:
+	# L7 掌门（章2/3/4 都有 L7 boss；章4 L7=1 掌门，章2/3 L7=2 boss）
+	var l7_ids: Array = BossConfig.boss_ids_for(chapter, 7)
+	var l7_slots: Array = layer_ids[7]
+	for i in range(l7_ids.size()):
+		if i >= l7_slots.size():
+			break
+		var slot_id: String = l7_slots[i]
+		nodes[slot_id]["type"] = "boss"
+		nodes[slot_id]["boss_id"] = l7_ids[i]
+	# 章4 L6 mini-boss
+	var l6_ids: Array = BossConfig.boss_ids_for(chapter, 6)
+	var l6_slots: Array = layer_ids[6]
+	for i in range(l6_ids.size()):
+		if i >= l6_slots.size():
+			break
+		var slot_id: String = l6_slots[i]
+		nodes[slot_id]["type"] = "boss"
+		nodes[slot_id]["boss_id"] = l6_ids[i]
+
 
 # 约束驱动的类型分配（保证下限 + 同层不重复 + L6 必含 escort）。
 #
@@ -86,17 +134,21 @@ static func generate_map(p_seed: int, chapter: int, hazard_delta: int = 0) -> Di
 # 关键：escort 放在 L6 槽后，该槽在 D/E 阶段标记已分配，不会被覆盖；
 # 因此 hazard/visit/sparring/duel 的下限不会被"强制 escort 覆盖"破坏。
 static func _assign_types(nodes: Dictionary, layer_ids: Dictionary, rng: RandomNumberGenerator, min_counts: Dictionary) -> void:
-	# --- A. L6 必含 escort：预定一个 L6 槽 ---
+	# --- A. L6 必含 escort：预定一个 L6 槽（跳过已标 boss 的 M4 多 boss 槽）---
 	var l6: Array = layer_ids[6]
 	var escort_slot_idx := -1   # 在 slots 数组中的索引（稍后填）
-	# 注意：slots 尚未构建，先在 nodes 上直接标记一个 L6 槽为 escort
+	# 注意：slots 尚未构建，先在 nodes 上直接标记一个空 L6 槽为 escort
 	var escort_node_id := ""
 	for id in l6:
-		# L6 此刻全空（_assign_types 入口），取第一个
+		# M4：L6 可能有 boss 槽（章4 mini-boss），跳过非空槽
+		if nodes[id]["type"] != "":
+			continue
 		escort_node_id = id
 		break
+	var l6_has_escort := false
 	if escort_node_id != "":
 		nodes[escort_node_id]["type"] = "escort"
+		l6_has_escort = true
 
 	# --- B. 收集所有中间层空槽 ---
 	var slots := []
@@ -106,13 +158,20 @@ static func _assign_types(nodes: Dictionary, layer_ids: Dictionary, rng: RandomN
 				slots.append([l, id])
 	_seed_shuffle(slots, rng)
 
-	# --- C. 展开需求清单（不含 escort：已由 A 保证）---
+	# --- C. 展开需求清单 ---
+	# M4：章4 L6 可能被 mini-boss 占满（无空槽），此时 A 未放 escort，
+	# 需在 D 阶段把 escort 放到任意中间层（保全局 escort≥1 下限）。
 	var needs := []
 	# 顺序：先放数量多的（duel×4），再放少的；同层不重复优先满足
 	for t in ["duel", "sparring", "hazard", "visit"]:
 		var n: int = int(min_counts.get(t, 0))
 		for _i in range(n):
 			needs.append(t)
+	if not l6_has_escort:
+		# A 未能在 L6 放 escort → 补一个 escort 需求（任意中间层）
+		var n_esc: int = int(min_counts.get("escort", 0))
+		for _i in range(n_esc):
+			needs.append("escort")
 
 	# --- D. 逐需求放置 ---
 	var assigned := []
@@ -185,6 +244,8 @@ static func _apply_hazard_delta(nodes: Dictionary, layer_ids: Dictionary, rng: R
 			var ty: String = nodes[id]["type"]
 			if ty == "hazard":
 				continue
+			if ty == "boss":
+				continue   # M4：L6 mini-boss 不可转 hazard（章1 无 L6 boss，此分支 no-op）
 			if l == 6 and ty == "escort":
 				continue   # L6 escort 唯一性保护
 			var floor: int = int(_MIN_COUNTS.get(ty, 0))
@@ -248,6 +309,8 @@ static func _ensure_peril_path(nodes: Dictionary, layer_ids: Dictionary, rng: Ra
 				var ty: String = nodes[id]["type"]
 				if ty == "hazard":
 					continue
+				if ty == "boss":
+					continue   # M4：L6 mini-boss 不可转 hazard
 				if cand_layer == 6 and ty == "escort":
 					continue
 				var floor: int = int(_MIN_COUNTS.get(ty, 0))
@@ -294,7 +357,7 @@ static func _layer_has_type(nodes: Dictionary, layer_ids: Dictionary, layer: int
 #   每个中间层节点(作为 from) 至少 1 条向下边；
 #   每个下一层节点(作为 to) 至少 1 条入边（显式扫描补连）；
 #   L6 → L7 全连。
-static func _build_edges(layer_ids: Dictionary, rng: RandomNumberGenerator) -> Array:
+static func _build_edges(layer_ids: Dictionary, rng: RandomNumberGenerator, chapter: int) -> Array:
 	var edges := []
 	var edge_set := {}   # "from|to" -> true，去重
 
@@ -325,9 +388,29 @@ static func _build_edges(layer_ids: Dictionary, rng: RandomNumberGenerator) -> A
 				var f = froms[rng.randi() % froms.size()]
 				_add_edge(edges, edge_set, f, t)
 
-	# L6 → L7 全连（每个 L6 节点都有出边且都通向首领）
-	for f in layer_ids[6]:
-		_add_edge(edges, edge_set, f, layer_ids[7][0])
+	# L6 → L7 分支：
+	#   章1/章4（L7 单 boss）：L6 → L7[0] 全连（M3 原逻辑，章1逐字节不变）
+	#   章2/3（L7 双 boss）：每个 L6 seeded 分配到一个 boss；补全保每 boss ≥1 入边
+	var l6: Array = layer_ids[6]
+	var l7: Array = layer_ids[7]
+	if chapter in [2, 3] and l7.size() >= 2:
+		# 每个收到的 boss 集合（保每 boss 至少 1 入边）
+		var boss_has_in := {}
+		for b in l7:
+			boss_has_in[b] = false
+		for f in l6:
+			# seeded 选一个 boss
+			var b: String = l7[rng.randi() % l7.size()]
+			_add_edge(edges, edge_set, f, b)
+			boss_has_in[b] = true
+		# 补全：任何缺入边的 boss 从第一个 L6 补一条（确定性）
+		for b in l7:
+			if not bool(boss_has_in[b]):
+				_add_edge(edges, edge_set, l6[0], b)
+	else:
+		# L6 → L7[0] 全连（M3 原逻辑；章1逐字节不变；章4 L7 单掌门同此）
+		for f in l6:
+			_add_edge(edges, edge_set, f, l7[0])
 
 	return edges
 
