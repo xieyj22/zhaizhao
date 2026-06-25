@@ -122,6 +122,9 @@ func _refresh() -> void:
 			read_line += "  ▶ %s 读中目标(predict=%s)！" % [personality.display_name if personality != null else "敌方", Technique.Type.keys()[e.predicted]]
 	if read_line != "":
 		_hud.text += "\n" + read_line
+	# reduce_motion 状态提示（M 键切换）
+	if view != null and view.reduce_motion:
+		_hud.text += "\n[简洁动效已开 · 按 M 切换]"
 
 	# 玩家方每个存活单位一个招式 picker
 	for u in state.units:
@@ -161,6 +164,14 @@ func _refresh() -> void:
 	if _scroll != null and not awaiting_target.is_empty():
 		_scroll.set_deferred("scroll_vertical", 999999)
 	view.queue_redraw()
+
+## M 键切换简洁动效（reduce_motion：破绽脉冲/受击闪白/飘字动画/HP lerp 降级或静化）。
+## a11y 收尾——动效敏感用户。本局内存态（不落盘）。
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_M:
+			view.reduce_motion = not view.reduce_motion
+			_refresh()
 
 func _player_can_pick(u: UnitState, tech: Technique) -> bool:
 	# —— M3: ban_close 险地，玩家也不可选 CLOSE 打击/虚招 ——

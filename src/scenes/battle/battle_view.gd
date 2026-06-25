@@ -29,11 +29,15 @@ func _process(delta: float) -> void:
 			alive.append(f)
 	floaters = alive
 	# HP 削切白条：慢追真实 hp（受击时绿条瞬降，白条延迟追上）
+	# reduce_motion: 瞬切（无 lerp 动画）
 	if state != null:
 		for u in state.units:
 			var key := String(u.id)
-			var cur: float = float(hp_white.get(key, u.hp))
-			hp_white[key] = lerpf(cur, float(u.hp), clampf(delta * 6.0, 0.0, 1.0))
+			if reduce_motion:
+				hp_white[key] = float(u.hp)
+			else:
+				var cur: float = float(hp_white.get(key, u.hp))
+				hp_white[key] = lerpf(cur, float(u.hp), clampf(delta * 6.0, 0.0, 1.0))
 	# 受击闪白衰减
 	var fkeys: Array = flashes.keys()
 	for k in fkeys:
@@ -49,6 +53,7 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 ## 命中飘字。critical（崩溃翻倍）= 黄字 150% + 震屏
+## reduce_motion: 寿命压短 + 标记静态（_draw 不上浮不淡出，仅短暂闪现数字）
 func spawn_floater(grid_pos: Vector2i, text: String, critical := false) -> void:
 	floaters.append({
 		"pos": Vector2(grid_pos.x * cell + cell / 2, grid_pos.y * cell),
@@ -56,13 +61,16 @@ func spawn_floater(grid_pos: Vector2i, text: String, critical := false) -> void:
 		"color": Color(1.2, 0.95, 0.2) if critical else Color(1.0, 1.0, 1.0),
 		"size": 20 if critical else 13,
 		"age": 0.0,
-		"life": 1.0 if critical else 0.8,
+		"life": (0.4 if critical else 0.35) if reduce_motion else (1.0 if critical else 0.8),
+		"static": reduce_motion,
 	})
 	if critical:
 		add_shake(5.0)
 
-## 受击闪白（命中瞬间方块叠白）
+## 受击闪白（命中瞬间方块叠白）。reduce_motion: 跳过（不闪）
 func flash_at(grid_pos: Vector2i) -> void:
+	if reduce_motion:
+		return
 	flashes["%d,%d" % [grid_pos.x, grid_pos.y]] = 0.18
 
 func add_shake(amount: float) -> void:
@@ -90,8 +98,12 @@ func _draw() -> void:
 			edge_col = Color(1.0, 0.15, 0.15)
 			edge_w = 3.0
 		elif u.opening >= u.max_opening - 1:
-			var pulse := 0.5 + 0.5 * sin(_t * 8.0)
-			edge_col = Color(1.0, 0.3, 0.2, 0.5 + 0.5 * pulse)
+			# 破绽警告闪红。reduce_motion: 静态红描边（不 8Hz 脉冲，motion 敏感源）
+			if reduce_motion:
+				edge_col = Color(1.0, 0.3, 0.2, 0.85)
+			else:
+				var pulse := 0.5 + 0.5 * sin(_t * 8.0)
+				edge_col = Color(1.0, 0.3, 0.2, 0.5 + 0.5 * pulse)
 			edge_w = 2.5
 		draw_rect(Rect2(origin + Vector2(6, 6), Vector2(cell - 12, cell - 12)), edge_col, false, edge_w)
 		# 受击闪白叠层
@@ -113,7 +125,10 @@ func _draw() -> void:
 	# 飘字（最上层）
 	for f in floaters:
 		var progress: float = f.age / f.life
-		var y: float = f.pos.y - progress * 28.0
+		var y: float = f.pos.y
 		var c: Color = f.color
-		c.a = 1.0 - progress
+		if not bool(f.get("static", false)):
+			y -= progress * 28.0      # 上浮
+			c.a = 1.0 - progress       # 淡出
+		# static(reduce_motion): 停在原位，alpha 随寿命末尾淡（信息保留更久）
 		draw_string(ThemeDB.fallback_font, Vector2(f.pos.x, y), f.text, HORIZONTAL_ALIGNMENT_CENTER, -1, f.size, c)
