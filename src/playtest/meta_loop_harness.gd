@@ -14,16 +14,17 @@ extends RefCounted
 class RunResult:
 	extends RefCounted
 	var seed_used: int = 0
-	var outcome: String = ""        # "cleared"(章末 boss 胜) / "protagonist_dead"(permadeath) / "stalled"(超 MAX_NODES 未结束)
-	var chapter_reached: int = 1    # 到达的最深章（章 2-4 未实装，上限 1）
+	var outcome: String = ""        # "cleared"(章4 掌门 yanwujiu 胜) / "protagonist_dead"(permadeath) / "stalled"(超 MAX_NODES 未结束) / "boss_draw"
+	var chapter_reached: int = 1    # 到达的最深章（1..4）
 	var battles_fought: int = 0
 	var bosses_defeated: int = 0
 	var total_battle_turns: int = 0
 	var modifier_ids: Array = []    # 本局 roll 的 modifier（诊断用）
+	var bosses_met: Array = []      # 遭遇过的 boss_id 列表（按遭遇顺序，可重复）
 
-## 跑一整局（章 1 完整 loop：hub→map 节点链→章末 boss）。
+## 跑一整局（4 章闭环：hub→map 节点链→章末 boss→advance→下一章……章 4 掌门 yanwujiu 胜=cleared）。
 ## player_personality = team0（玩家方）AI 性格；敌方性格按 node_cfg。
-## 章 2-4 未实装，章 1 boss 胜即"cleared"。
+## 章 N（N<4）boss 胜 → advance_chapter 续跑章 N+1；章 4 yanwujiu 胜 → cleared。
 ## auto_recruit=true 时开局限招募可招派系队友（复刻玩家 hub 招募，让整局更真实）。
 static func run_one(meta: MetaState, seed: int, player_personality: AIPersonality, auto_recruit := true) -> RunResult:
 	var res := RunResult.new()
@@ -36,7 +37,7 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 
 	var tuning := _tuning_for(run)
 
-	const MAX_NODES := 64   # 防 DAG 异常无限走（章 1 约 8 层，64 足够兜底）
+	const MAX_NODES := 256   # 防 DAG 异常无限走（4 章 × 每章 ~8 层，256 兜底）
 	var steps := 0
 	while steps < MAX_NODES:
 		steps += 1
@@ -45,11 +46,16 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 			res.outcome = "protagonist_dead"
 			res.chapter_reached = run.current_chapter
 			return res
-		# 章末 boss 已败 → 通关（章 2-4 未实装，到此为止）
+		# 章末 boss 已败 → 推进或通关
 		if RunFlow.can_advance_chapter(run):
-			res.outcome = "cleared"
-			res.chapter_reached = run.current_chapter
-			return res
+			if run.current_chapter >= 4:   # 章 4 掌门 yanwujiu 胜 = 通关
+				res.outcome = "cleared"
+				res.chapter_reached = run.current_chapter
+				return res
+			# 章 1-3 boss 胜 → 推进下一章，续跑
+			RunFlow.advance_chapter(run)
+			RunFlow.place_at_chapter_start(run)   # advance 置 current_node_id=""，需重定位 L0
+			continue   # 回 loop 顶处理新章（is_run_over/can_advance/选节点）
 		# 取下一可达节点（DAG 邻接）；无邻接且未通关 → stalled
 		var m: Dictionary = run.chapter_maps[run.current_chapter]
 		var nxt: Array = MapGenerator.reachable_next(m, run.current_node_id)
@@ -114,7 +120,16 @@ static func _tuning_for(run: RunState) -> Tuning:
 static func _fight_battle(run: RunState, node_type: String, node_id: String,
 		tuning: Tuning, player_personality: AIPersonality,
 		meta: MetaState, res: RunResult) -> void:
-	var node_cfg: Dictionary = _node_cfg_for(run.current_chapter, node_type, node_id, run.rng_seed)
+	# 查节点真实 boss_id（章1 boss 节点无 boss_id 字段→回退 EnemyPool.CHAPTER_BOSS_ID）
+	var node_real_boss_id := ""
+	if node_type == "boss" and run.chapter_maps.has(run.current_chapter):
+		var m: Dictionary = run.chapter_maps[run.current_chapter]
+		if m["nodes"].has(node_id):
+			node_real_boss_id = String(m["nodes"][node_id].get("boss_id", ""))
+	var node_cfg: Dictionary = _node_cfg_for(run.current_chapter, node_type, node_id, run.rng_seed, node_real_boss_id)
+	# 遭遇 boss 即记 bosses_met（按遭遇顺序，可重复）
+	if node_type == "boss" and node_cfg.has("boss_id"):
+		res.bosses_met.append(String(node_cfg["boss_id"]))
 	var s := BattleBuilder.build(run, node_cfg)
 	# 敌方性格（boss→brute；否则读 node_cfg.personality——由 EnemyPool 组合带出）
 	var enemy_personality := _enemy_personality_for(node_cfg)
@@ -174,11 +189,12 @@ static func _fight_battle(run: RunState, node_type: String, node_id: String,
 				res.chapter_reached = run.current_chapter
 			# TEAM1_WIN：主角若死由下轮 is_run_over 捕获；主角活则 stalled（boss 邻接为空）
 
-## node_cfg 构造：boss 固定（按章 EnemyPool.CHAPTER_BOSS_ID）；非 boss 主动 EnemyPool.pick 取组合（带 personality + risk），
-## 让 BattleBuilder 用显式 enemies（不二次 pick）+ _enemy_personality_for 读组合性格。
-static func _node_cfg_for(chapter: int, node_type: String, node_id: String, rng_seed: int) -> Dictionary:
+## node_cfg 构造：boss 用节点真实 boss_id（caller 从 m["nodes"][node_id].boss_id 查得，章1无字段→回退表）；
+## 非 boss 主动 EnemyPool.pick 取组合（带 personality + risk），让 BattleBuilder 用显式 enemies（不二次 pick）+ _enemy_personality_for 读组合性格。
+## real_boss_id 由 _fight_battle 从节点 boss_id 字段查得传入——这是 ch4 L6 mini-boss vs L7 yanwujiu 保真的关键。
+static func _node_cfg_for(chapter: int, node_type: String, node_id: String, rng_seed: int, real_boss_id: String = "") -> Dictionary:
 	if node_type == "boss":
-		var boss_id: String = String(EnemyPool.CHAPTER_BOSS_ID.get(chapter, "hailianzheng"))
+		var boss_id: String = real_boss_id if real_boss_id != "" else String(EnemyPool.CHAPTER_BOSS_ID.get(chapter, "hailianzheng"))
 		return {"boss_id":boss_id,"node_type":"boss"}
 	# 非 boss：主动抽组合，把 enemies + personality 显式带进 node_cfg
 	var risk: int = 1 if node_type == "hazard" else 0
