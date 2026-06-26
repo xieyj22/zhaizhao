@@ -121,7 +121,7 @@ func _draw() -> void:
 		# 破绽条（橙）
 		var op_w := float(u.opening) / float(max(1, u.max_opening)) * (cell - 16)
 		draw_rect(Rect2(origin + Vector2(8, cell - 8), Vector2(op_w, 4)), Color(0.9, 0.6, 0.1))
-		draw_string(ThemeDB.fallback_font, origin + Vector2(8, cell - 12), String(u.id), HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
+		draw_string(ThemeDB.fallback_font, origin + Vector2(8, cell - 12), u.display_label(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
 	# 飘字（最上层）
 	for f in floaters:
 		var progress: float = f.age / f.life

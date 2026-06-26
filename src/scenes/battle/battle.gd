@@ -145,7 +145,7 @@ func _refresh() -> void:
 		var title := Label.new()
 		var role_name: String = ["攻", "守", "中"][Stance.role(u.stance)]
 		title.text = "【%s】HP %d/%d 破绽 %d/%d%s 架势%d(%s) %s" % [
-			String(u.id), u.hp, u.max_hp, u.opening, u.max_opening,
+			u.display_label(), u.hp, u.max_hp, u.opening, u.max_opening,
 			" 崩溃!" if u.guard_broken else "", u.stance, role_name,
 			"✓已指令" if pending.has(String(u.id)) else "待指令"
 		]
@@ -164,7 +164,7 @@ func _refresh() -> void:
 		if awaiting_target.has(String(u.id)):
 			var tech: Technique = awaiting_target[String(u.id)]
 			var lbl := Label.new()
-			lbl.text = "→ %s 选目标：" % String(u.id)
+			lbl.text = "→ %s 选目标：" % u.display_label()
 			_target_panel.add_child(lbl)
 			for e in state.units:
 				if e.team != 0 and e.alive and RangeBand.in_range(u.grid_pos, e.grid_pos, tech.required_range, tuning):

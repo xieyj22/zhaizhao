@@ -188,3 +188,39 @@ func test_enemy_unit_hp_default_20_when_missing():
 	var s := BattleBuilder.build(_run(), node_cfg)
 	var e: UnitState = s.units.filter(func(u): return u.team == 1)[0]
 	assert_eq(e.max_hp, 20, "ed 无 hp → 兜底 20")
+
+# —— T10 玩家验收：单位显示真名而非内部 id（protagonist/ally_F4_x/yanwujiu）——
+
+func test_roster_unit_carries_display_name():
+	# 主角 roster pd 带 display_name → built UnitState 携带（战斗 UI 应显示"遗照"而非"protagonist"）
+	var run := _run()
+	run.player_roster = [{"id":"protagonist","team":0,"hp":34,"max_hp":34,"opening":0,"max_opening":6,
+		"stance":0,"grid_pos":[1,3],"facing":0,"guard_broken":false,"alive":true,
+		"kit_ids":[],"display_name":"遗照","is_protagonist":true}]
+	var s := BattleBuilder.build(run, {"node_type":"duel","enemies":[]})
+	var p: UnitState = s.units.filter(func(u): return u.team == 0)[0]
+	assert_eq(p.display_name, "遗照", "主角 display_name 来自 roster pd")
+	assert_eq(p.display_label(), "遗照", "display_label 显示真名")
+
+func test_boss_unit_carries_boss_config_name():
+	# boss 单位 display_name 来自 BOSS_CONFIG.name（显示"颜无咎"而非"yanwujiu"）
+	var run := _run()
+	var s := BattleBuilder.build(run, {"boss_id":"yanwujiu","node_type":"boss"})
+	var boss: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(boss.display_name, "颜无咎", "boss display_name 来自 BOSS_CONFIG.name")
+	assert_eq(boss.display_label(), "颜无咎", "boss display_label 显示真名（非 yanwujiu）")
+
+func test_enemy_unit_display_label_not_raw_id():
+	# 普通敌人无 display_name → display_label 不应是裸 id "e1"（兜底"敌方"）
+	var node_cfg: Dictionary = {"enemies":[
+		{"id":"e1","faction":"F2","grid_pos":[5,3],"stance":0,"hp":20,"kit":["chifeng_lianci"]}
+	]}
+	var e: UnitState = BattleBuilder.build(_run(), node_cfg).units.filter(func(u): return u.team == 1)[0]
+	assert_ne(e.display_label(), "e1", "普通敌人 display_label 不显示裸 id")
+
+func test_display_label_falls_back_to_id_when_empty():
+	# display_name 空 → display_label 回退 id（绝不显示空）
+	var u := UnitState.new()
+	u.id = StringName("x")
+	u.display_name = ""
+	assert_eq(u.display_label(), "x", "空 display_name 回退 id")

@@ -21,6 +21,12 @@ var frenzied: bool = false
 var boss_id: String = ""
 ## —— M3: 由 battle_builder 构造时填充（不入 to_dict）——
 var kit: Array = []   # Array[Technique]，战斗态，不序列化
+## 显示名（玩家验收：战斗界面显示真名而非内部 id）。由 battle_builder 填充（roster pd / BOSS_CONFIG.name / 兜底）。不入 to_dict。
+var display_name: String = ""
+
+## 渲染用名：有 display_name 用之，否则回退 id（绝不显示空）。
+func display_label() -> String:
+	return display_name if display_name != "" else String(id)
 
 func to_dict() -> Dictionary:
 	return {
@@ -54,4 +60,5 @@ static func from_dict(d: Dictionary) -> UnitState:
 	u.alive = d.get("alive", true)
 	u.frenzied = d.get("frenzied", false)
 	u.boss_id = d.get("boss_id", "")
+	u.display_name = String(d.get("display_name", ""))
 	return u

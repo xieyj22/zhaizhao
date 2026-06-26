@@ -54,6 +54,7 @@ static func _unit_from_enemy(ed: Dictionary) -> UnitState:
 	u.hp = hp
 	u.max_hp = hp
 	u.kit = _build_kit(ed.get("kit",[]), RunState.new())   # 敌方无 variant（run 空）
+	u.display_name = String(ed.get("display_name", "敌方"))   # 普通敌人兜底"敌方"（不显示裸 id）
 	return u
 
 ## boss 敌方单位：查 BOSS_CONFIG 取 personality/stance/kit/hp_base。
@@ -70,6 +71,7 @@ static func _unit_from_boss(boss_id: String, run: RunState) -> UnitState:
 	var hp := _scaled_boss_hp(int(cfg.get("hp_base", 20)), run.current_chapter)
 	u.hp = hp
 	u.max_hp = hp
+	u.display_name = String(cfg.get("name", String(u.id)))   # 显示"颜无咎"而非"yanwujiu"
 	u.kit = _build_kit(cfg.get("kit", []), run)
 	return u
 
