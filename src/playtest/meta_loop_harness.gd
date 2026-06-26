@@ -48,7 +48,12 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 			return res
 		# 章末 boss 已败 → 推进或通关
 		if RunFlow.can_advance_chapter(run):
+			var ch_before := run.current_chapter
 			var prog_outcome: String = _progress_after_boss(run)
+			# 章节推进（advance 到新章）→ 重置本章休整配额（每章独立 rest_cap）
+			# 不塞进 _progress_after_boss（保持该 helper 纯决策，其 3 个测试不受影响）
+			if run.current_chapter != ch_before:
+				run.rest_used = 0
 			if prog_outcome == "cleared":
 				# 章 4 掌门 yanwujiu 胜 = 通关（_progress_after_boss 已判定，未调 advance 防溢出）
 				res.outcome = "cleared"
@@ -70,6 +75,8 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 		match ty:
 			"boss","duel","sparring","hazard":
 				_fight_battle(run, ty, target, tuning, player_personality, meta, res)
+				# 战斗间休整：复刻设计意图的恢复循环（roster 有损伤且配额未满→满血）
+				_maybe_rest(run, tuning)
 			"visit","escort":
 				_grant_unlock(run, ty, target, meta.meta_unlocked_pool)
 			"start","_":
@@ -78,6 +85,28 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 	res.outcome = "stalled"
 	res.chapter_reached = run.current_chapter
 	return res
+
+## 模拟玩家休整（复刻设计意图：每章 rest_cap_per_chapter 次满血休整）。
+## 战斗后若 roster 有损伤且本章休整未用完 → 满血恢复全员，rest_used++。
+## rest_used 在章节推进（advance）时由 run_one 重置（每章独立配额）。
+## 无 rng，确定性——不破坏 run_one 的 seeded 复现。
+static func _maybe_rest(run: RunState, tuning: Tuning) -> void:
+	var cap: int = tuning.rest_cap_per_chapter
+	if run.rest_used >= cap:
+		return
+	var need := false
+	for pd in run.player_roster:
+		if int(pd.get("hp", 0)) < int(pd.get("max_hp", 0)):
+			need = true
+			break
+	if not need:
+		return
+	for i in range(run.player_roster.size()):
+		var pd: Dictionary = run.player_roster[i]
+		var mhp: int = int(pd.get("max_hp", 0))
+		pd["hp"] = mhp
+		run.player_roster[i] = pd
+	run.rest_used += 1
 
 ## boss 胜后的章节推进决策（run_one 内 can_advance_chapter 为 true 时调）。
 ## 返回 "cleared"（ch4 掌门 yanwujiu 胜=通关，调用方设 RunResult 并 return）或 ""（推进到下一章或仍在当章，循环继续）。

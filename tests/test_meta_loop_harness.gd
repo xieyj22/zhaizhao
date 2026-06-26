@@ -133,3 +133,43 @@ func test_progress_after_boss_no_clear_until_boss_defeated():
 	var outcome: String = MetaLoopHarness._progress_after_boss(run)
 	assert_eq(outcome, "", "ch4 yanwujiu 未败 → 不通关，继续当章")
 	assert_eq(run.current_chapter, 4, "未推进，仍在章 4")
+
+# ---- T10b Part B: harness 战斗间休整回血模型（复刻 rest_cap 设计）----
+# 复刻设计意图：每章 rest_cap_per_chapter 次满血休整。roster 有损伤且配额未满→满血+rest_used++。
+# 直接驱动纯函数 _maybe_rest（绕开整局平衡），验休整逻辑本身。
+
+func _rest_test_run(hp: int, max_hp: int, rest_used: int) -> RunState:
+	# 合成带一个损伤主角的 roster（hp<max_hp），rest_used 可配
+	var run := _make_synthetic_run(1, [])
+	run.player_roster = [{
+		"id":"protagonist","team":0,"hp":hp,"max_hp":max_hp,
+		"opening":0,"max_opening":6,"stance":0,"grid_pos":[1,3],
+		"facing":0,"guard_broken":false,"alive":true,
+		"kit_ids":["tongshi_jinda"],"is_protagonist":true,
+	}]
+	run.rest_used = rest_used
+	return run
+
+func test_maybe_rest_heals_when_cap_available():
+	# roster 损伤 + rest_used<cap → 满血 + rest_used+1
+	var run := _rest_test_run(8, 20, 0)
+	var tuning := Tuning.new()   # rest_cap_per_chapter=2 默认
+	MetaLoopHarness._maybe_rest(run, tuning)
+	assert_eq(int(run.player_roster[0]["hp"]), 20, "损伤 + 配额可用 → 满血")
+	assert_eq(run.rest_used, 1, "rest_used +1")
+
+func test_maybe_rest_noop_when_cap_used():
+	# rest_used==cap → 不回血、不增 rest_used
+	var run := _rest_test_run(8, 20, 2)   # cap=2 已用满
+	var tuning := Tuning.new()
+	MetaLoopHarness._maybe_rest(run, tuning)
+	assert_eq(int(run.player_roster[0]["hp"]), 8, "配额用满 → 不回血")
+	assert_eq(run.rest_used, 2, "rest_used 不增")
+
+func test_maybe_rest_noop_when_full_hp():
+	# 满血 → 不消耗配额（无需休整）
+	var run := _rest_test_run(20, 20, 0)
+	var tuning := Tuning.new()
+	MetaLoopHarness._maybe_rest(run, tuning)
+	assert_eq(int(run.player_roster[0]["hp"]), 20, "满血 → 保持满血")
+	assert_eq(run.rest_used, 0, "满血 → 不消耗配额")
