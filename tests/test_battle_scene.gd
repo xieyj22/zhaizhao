@@ -168,3 +168,84 @@ func test_retreat_button_present_and_visible_during_battle():
 	battle.queue_free()
 	MetaSession.current_run = null
 	MetaSession.current_node_cfg = {}
+
+# ---- T10e Bug B: mind_eye predictions 必须转发给 orch.ai_predictions ----
+# 回归：battle.gd:_on_reveal 取了 ai_out.predictions 喂 compute_read_events（读招显示），
+# 但从不 orch.ai_predictions = ai_out.predictions → mind_eye 反制伤(-2) 死代码。
+# 修法：reveal_and_resolve 前设 orch.ai_predictions = ai_out.predictions（敌方对玩家的预测）。
+# ---- T10e Bug C: ch4 掌门胜 → 通关（commit meta + 回 hub），不生成幻影 ch5 ----
+# 回归：battle.gd:_on_back_after_battle 在 ch4 boss 胜时调 advance_chapter → current_chapter=5 +
+# generate_map(seed,5) 幻影第5章。修法：加 RunFlow.MAX_CHAPTER=4 守卫，ch4 胜直接 commit+hub。
+func test_ch4_boss_win_clears_run_not_advances_to_ch5():
+	var meta := MetaState.new_first_play()
+	var runs_before := meta.meta_runs_completed
+	var run := RunFactory.init_run(meta, 7)   # 章1
+	# 合成 ch4 状态：current_chapter=4，掌门 yanwujiu 已败（can_advance_chapter true）
+	run.current_chapter = 4
+	run.chapter_maps[4] = MapGenerator.generate_map(7, 4, 0)   # ch4 图含 boss 节点
+	run.chapter_progress[4] = {"bosses_defeated": ["yanwujiu"], "nodes_visited": []}
+	# 找 ch4 boss 节点设 current_node_id
+	var boss_node := ""
+	for id in run.chapter_maps[4]["nodes"]:
+		if String(run.chapter_maps[4]["nodes"][id].get("type","")) == "boss":
+			boss_node = String(id); break
+	assert_ne(boss_node, "", "ch4 图有 boss 节点")
+	run.current_node_id = boss_node
+	MetaSession.current_run = run
+	MetaSession.meta_state = meta
+	MetaSession.last_battle_outcome = BattleState.Outcome.TEAM0_WIN
+	# 主角存活（init_run 默认）→ is_run_over false → 走 boss 胜分支
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	battle._on_back_after_battle()
+	# 关键断言：ch4 胜 = 通关
+	assert_null(MetaSession.current_run, "ch4 掌门胜 → current_run 清空（通关，回 hub）")
+	assert_eq(MetaSession.meta_state.meta_runs_completed, runs_before + 1,
+		"ch4 胜 → meta_runs_completed +1（commit run_won=true）")
+	# ch5 幻影不应存在（修复前会 advance_chapter 生成 chapter_maps[5]）
+	# 注：current_run 已 null，但若 advance_chapter 曾执行过，meta 里无残留（run 已丢）；此断言保 place_at_chapter 不炸
+	remove_child(battle)
+	battle.queue_free()
+	# 清理全局态
+	MetaSession.current_run = null
+	MetaSession.meta_state = null
+	MetaSession.last_battle_outcome = 0
+
+func test_runflow_max_chapter_constant_is_four():
+	# 集中"最终章"概念：RunFlow.MAX_CHAPTER == 4
+	assert_eq(RunFlow.MAX_CHAPTER, 4, "RunFlow.MAX_CHAPTER 常量 = 4（掌门 yanwujiu 所在章）")
+
+func test_mind_eye_predictions_forwarded_to_orch_after_reveal():
+	# sikongyi = mind_eye boss。构造 boss 战，玩家下指令，跑 _on_reveal。
+	# 敌方有存活单位时 ai_out.predictions 非空 → 转发后 orch.ai_predictions 必须非空。
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	MetaSession.current_run = run
+	# sikongyi 在 [5,3]，玩家主角在 [1,3]（init_run 默认）——同列相邻近，AI 会预测玩家招
+	MetaSession.current_node_cfg = {"boss_id":"sikongyi","node_type":"boss"}
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	# 确认是 mind_eye boss 战
+	assert_true(battle.state.boss_traits.has("sikongyi"), "sikongyi 注入 mind_eye trait")
+	# 给玩家主角下指令（远打必中，让 AI 有可预测对象）
+	var p0 = null
+	for u in battle.state.units:
+		if u.team == 0 and u.alive:
+			p0 = u
+			break
+	assert_not_null(p0, "玩家单位存在")
+	for e in battle.state.units:
+		if e.team != 0 and e.alive and RangeBand.in_range(p0.grid_pos, e.grid_pos, RangeBand.Id.FAR, battle.tuning):
+			battle._on_pick_target(p0, TechniqueKit.strike_far(), e.grid_pos)
+			break
+	# 转发前 ai_predictions 应为默认空 dict（_init 设 {}）
+	assert_eq(battle.orch.ai_predictions.size(), 0, "reveal 前 orch.ai_predictions 空（默认）")
+	battle._on_reveal()
+	# 关键断言：reveal 后 orch.ai_predictions 必须非空（敌方预测了玩家且已转发）
+	# sikongyi 是 mind_eye（confidence=1.0 必预测），玩家单位在其 nearest enemy 范围内 → predictions 非空
+	assert_true(battle.orch.ai_predictions.size() > 0,
+		"reveal 后 orch.ai_predictions 非空（敌方 mind_eye 预测已转发，反制伤可触发）")
+	remove_child(battle)
+	battle.queue_free()
+	MetaSession.current_run = null
+	MetaSession.current_node_cfg = {}

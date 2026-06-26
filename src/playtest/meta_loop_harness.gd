@@ -71,6 +71,12 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 		match ty:
 			"boss","duel","sparring","hazard":
 				_fight_battle(run, ty, target, tuning, player_personality, meta, res)
+				# —— T10e Bug E：boss DRAW 是终态 outcome（局结束），修复前未 return →
+				# 下轮循环 boss 节点 reachable_next 空 → res.outcome 被覆盖成 stalled，
+				# SeriesStats.boss_draw 成死码。现战斗后立即识别终态并 return。
+				if res.outcome == "boss_draw":
+					res.chapter_reached = run.current_chapter
+					return res
 				# 战斗间休整：复刻设计意图的恢复循环（roster 有损伤且配额未满→满血）
 				_maybe_rest(run, tuning)
 			"visit","escort":
@@ -95,7 +101,7 @@ static func _maybe_rest(run: RunState, tuning: Tuning) -> void:
 static func _progress_after_boss(run: RunState) -> String:
 	if not RunFlow.can_advance_chapter(run):
 		return ""
-	if run.current_chapter >= 4:   # 章 4 掌门 yanwujiu 胜 = 通关
+	if run.current_chapter >= RunFlow.MAX_CHAPTER:   # 章 4 掌门 yanwujiu 胜 = 通关（T10e Bug C：用常量）
 		return "cleared"
 	# 章 1-3 boss 胜 → 推进下一章
 	RunFlow.advance_chapter(run)
@@ -177,6 +183,9 @@ static func _fight_battle(run: RunState, node_type: String, node_id: String,
 				pre_keys_t1[String(u.id)] = pm_player.featurize(u, s, tuning)
 		var ai0 := AIController.choose_actions(s, 0, tuning, kits, rng_seed, pm_player, player_personality)
 		var ai1 := AIController.choose_actions(s, 1, tuning, kits, rng_seed, pm_enemy, enemy_personality)
+		# —— T10e Bug B：转发敌方(team1)对玩家的预测给 orch，让 mind_eye 反制伤(-2) 在 harness 里也触发 ——
+		# ai1 是 team1(boss/敌方) 的 choose_actions，predictions 键=team0(玩家) unit id。
+		orch.ai_predictions = ai1.predictions
 		orch.reveal_and_resolve(ai0.actions + ai1.actions)
 		# observe team1 进 pm_player（用 pre-resolve 特征）
 		for a in ai1.actions:
@@ -229,14 +238,21 @@ static func _node_cfg_for(chapter: int, node_type: String, node_id: String, rng_
 		"enemies": combo.get("enemies", []),
 	}
 
-## 敌方性格（boss→brute；否则读 node_cfg.personality——由 EnemyPool 组合带出，复刻 battle.gd._personality_for）。
+## 敌方性格（boss→BossConfig.personality，复刻 battle.gd._personality_for；
+## 否则读 node_cfg.personality——由 EnemyPool 组合带出）。
+## T10e Bug D 修复：此前硬编码 brute，使 yanwujiu(brain_trick_hybrid)/sikongyi(brain)/moqingniang(trick)
+## 全变 brute → 平衡数据失真。现读真实性格，与 battle.gd 实装一致。
 static func _enemy_personality_for(node_cfg: Dictionary) -> AIPersonality:
+	var p: String = "brain"
 	if node_cfg.has("boss_id"):
-		return AIPersonality.brute()
-	var p: String = String(node_cfg.get("personality", "brain"))
+		var cfg: Dictionary = BossConfig.get_boss(String(node_cfg["boss_id"]))
+		p = String(cfg.get("personality", "brute"))
+	else:
+		p = String(node_cfg.get("personality", "brain"))
 	match p:
 		"brute": return AIPersonality.brute()
 		"trick": return AIPersonality.trick()
+		"brain_trick_hybrid": return AIPersonality.brain_trick_hybrid()
 		_: return AIPersonality.brain()
 
 ## visit/escort 节点：roll 解锁招加进 unlocked（复刻 map.gd:62-64，传真实 meta_pool）。

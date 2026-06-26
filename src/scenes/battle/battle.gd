@@ -237,6 +237,10 @@ func _on_reveal() -> void:
 	var all_actions: Array = pending.values() + ai_out.actions
 	pending.clear()
 	awaiting_target.clear()
+	# —— T10e Bug B：转发敌方(team1)对玩家的预测给 orch，让 mind_eye 反制伤(-2) 可触发 ——
+	# 修复前：ai_out.predictions 只喂 compute_read_events（读招显示），从不转发 → mind_eye 死代码。
+	# ai_out 是 team1(boss/敌方) 的 choose_actions，predictions 键=玩家方 unit id，正是 mind_eye_counter 所需。
+	orch.ai_predictions = ai_out.predictions
 	# 记 pre hp/guard（juice：伤害飘字+震屏用，reveal 前）
 	var pre_hp: Dictionary = {}
 	var pre_guard: Dictionary = {}
@@ -320,5 +324,15 @@ func _on_back_after_battle() -> void:
 	if ty == "boss" and oc == BattleState.Outcome.TEAM0_WIN:
 		RunFlow.on_boss_defeated(run)
 		if RunFlow.can_advance_chapter(run):
+			# —— T10e Bug C：ch4 掌门胜 = 通关（不再 advance 到幻影 ch5）——
+			# 修复前无 MAX_CHAPTER 守卫：advance_chapter → current_chapter=5 + generate_map(5) 炸。
+			# 现镜像 permadeath 分支：commit run_won=true（meta_runs_completed+1），清 current_run，回 hub。
+			if run.current_chapter >= RunFlow.MAX_CHAPTER:
+				var meta := MetaState.commit_run_to_meta(MetaSession.meta_state, run, true)
+				MetaState.save_to(meta)
+				MetaSession.meta_state = meta
+				MetaSession.current_run = null
+				get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")
+				return
 			RunFlow.advance_chapter(run)
 	get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")

@@ -4,6 +4,10 @@ extends RefCounted
 ## run 状态机（T4 §7.4 不变量 114–115）。
 ## 节点按 DAG 边前进；章节间需 bosses_defeated 含当章通关 boss（M4 T5）。纯函数，无副作用外溢。
 
+## 最终章序号（T10e Bug C 集中"最终章"概念）。掌门 yanwujiu 在此章；胜=通关，不再 advance。
+## battle.gd:_on_back_after_battle 与 meta_loop_harness._progress_after_boss 共用，消除硬编码 4 的重复。
+const MAX_CHAPTER := 4
+
 ## 判定能否从当前节点前进到 target（T4 §7.4 不变量 114：仅沿 DAG 边）。
 static func can_advance_node(run: RunState, target_node_id: String) -> bool:
 	if not run.chapter_maps.has(run.current_chapter):

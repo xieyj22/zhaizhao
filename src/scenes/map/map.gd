@@ -67,10 +67,31 @@ func _on_enter_node(node_id: String) -> void:
 			_refresh_scene()
 
 func _node_cfg_for(node_type: String, node_id: String) -> Dictionary:
+	# —— T10e Bug A：读节点真实数据，让 BattleBuilder 构造 boss / EnemyPool 抽敌人 ——
+	# 修复前：硬编码 boss=hailianzheng + 敌人=chifeng，ch2/3/4 真实游戏所有 boss 战变赫连铮、
+	# 所有普通战同一 chifeng 敌人（BOSS_CONFIG/EnemyPool 数据层只在 harness/snap 用，实装游戏失效）。
+	var run := MetaSession.current_run
+	var rng_seed: int = run.rng_seed if run != null else 0
 	if node_type == "boss":
-		return {"boss_id":"hailianzheng","personality":"brute","enemies":[
-			{"id":"hailianzheng","faction":"F2","personality":"brute","grid_pos":[5,3],"stance":Stance.Id.METAL,"kit":["chifeng_lianci","chifeng_yajin","xueyi_xuedao"]}]}
-	return {"enemies":[{"id":"e1","faction":"F2","personality":"brute","grid_pos":[5,3],"stance":Stance.Id.WOOD,"kit":["chifeng_lianci","chifeng_yajin"]}]}
+		# 读节点真实 boss_id（ch1 boss 节点无 boss_id 字段 → 回退 hailianzheng，章1逐字节不变）；
+		# 让 BattleBuilder.build 走 _unit_from_boss 构造（trait/曲线/personality 由 BossConfig 提供）。
+		var bid: String = "hailianzheng"
+		if run != null and run.chapter_maps.has(run.current_chapter):
+			var m: Dictionary = run.chapter_maps[run.current_chapter]
+			if m["nodes"].has(node_id):
+				bid = String(m["nodes"][node_id].get("boss_id", "hailianzheng"))
+		return {"boss_id": bid, "node_type": "boss"}
+	# 非 boss：EnemyPool.pick 取组合（复刻 harness _node_cfg_for 非 boss 分支）。
+	# risk：hazard=1（险地偏好高 difficulty），其余=0。
+	var risk: int = 1 if node_type == "hazard" else 0
+	var chapter: int = run.current_chapter if run != null else 1
+	var combo: Dictionary = EnemyPool.pick(chapter, node_type, risk, rng_seed)
+	return {
+		"node_type": node_type,
+		"risk": risk,
+		"personality": String(combo.get("personality", "brain")),
+		"enemies": combo.get("enemies", []),
+	}
 
 func _refresh_scene() -> void:
 	for c in _layer.get_children(): c.queue_free()
