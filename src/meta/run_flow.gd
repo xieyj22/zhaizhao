@@ -16,17 +16,26 @@ static func can_advance_node(run: RunState, target_node_id: String) -> bool:
 	return MapGenerator.reachable_next(m, run.current_node_id).has(target_node_id)
 
 ## 进入节点：移动 current_node_id，记录已访问，追加 run_log（T4 §7.4）。
+## 已访问节点可回放（map 标 ✓ 可点）——nodes_visited 去重，防回放重复记录。
 static func enter_node(run: RunState, target_node_id: String) -> void:
 	run.current_node_id = target_node_id
 	var cp: Dictionary = run.chapter_progress.get(
 		run.current_chapter, {"bosses_defeated": [], "nodes_visited": []}
 	)
-	(cp["nodes_visited"] as Array).append(target_node_id)
+	var visited: Array = cp.get("nodes_visited", [])
+	if not visited.has(target_node_id):
+		visited.append(target_node_id)
+	cp["nodes_visited"] = visited
 	run.chapter_progress[run.current_chapter] = cp
 	var ty: String = run.chapter_maps[run.current_chapter]["nodes"][target_node_id]["type"]
 	(run.run_log as Array).append(
 		{"node_id": target_node_id, "node_type": ty, "outcome": "visited"}
 	)
+
+## 节点是否已访问过（本章）。供 map 标记"已通关可回放"。
+static func is_visited(run: RunState, node_id: String) -> bool:
+	var cp: Dictionary = run.chapter_progress.get(run.current_chapter, {"nodes_visited": []})
+	return (cp.get("nodes_visited", []) as Array).has(node_id)
 
 ## 判定能否进入下一章（T4 §7.4 不变量 115：当前章 boss 必须已败）。
 ## M4 T5：章1-3 任一 L7 boss 败即可；章4 必须掌门 yanwujiu（L6 mini-boss 不算）。

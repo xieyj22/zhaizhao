@@ -42,3 +42,6 @@ extends Resource
 @export var rest_cap_per_chapter: int = 3          # 镖局休整上限/章（T10f 调平：2→3）
 @export var credit_service_cost: int = 8           # 镖局服务单价（休整/升级/黑市）
 @export var credit_income_chapter1: int = 25       # 章 1 信用产出（~2-4 次服务/run）
+## —— T10 招募材料（信用经济）：访问节点挣信用，招募花信用 ——
+@export var credit_per_visit: int = 10             # 访问/护送节点给的信用（招募经济来源）
+@export var recruit_credit_cost: int = 15          # 招募一名同袍的信用花费（材料）

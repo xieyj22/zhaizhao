@@ -36,7 +36,12 @@ func _build_ui() -> void:
 					btn.text += " ★高回报"
 			if id == run.current_node_id:
 				btn.text += " ★"
-			if RunFlow.can_advance_node(run, id):
+			# —— 已通关节点可回放（玩家验收：想重玩之前的节点）——
+			var visited := RunFlow.is_visited(run, id)
+			if visited and id != run.current_node_id:
+				btn.text += " ✓"   # 已通关可回放
+			# 可点：DAG 前进可达，或已通关（回放）。当前节点无自环、不可重复进。
+			if RunFlow.can_advance_node(run, id) or (visited and id != run.current_node_id):
 				btn.pressed.connect(_on_enter_node.bind(id))
 			else:
 				btn.disabled = (id != run.current_node_id)
@@ -54,11 +59,8 @@ func _on_enter_node(node_id: String) -> void:
 			MetaSession.current_node_cfg = _node_cfg_for(ty, node_id)
 			get_tree().change_scene_to_file("res://src/scenes/battle/battle.tscn")
 		"visit","escort":
-			# —— M3.5: 镖局(escort)信用消费 ——
-			# M4 镖局实装时此处扣 tuning.credit_service_cost × (1/credit_mult)：
-			#   var cost := int(round(float(Tuning.new().credit_service_cost) / float(run.modifier_state.get("credit_mult", 1.0))))
-			#   run.jianghu_credit = max(0, run.jianghu_credit - cost)
-			# 现 escort 为占位（无服务菜单），仅打 unlock reward，信用消费留 M4 镖局实装接。
+			# —— T10 招募经济：访问/护送节点挣信用（招募同袍的材料）——
+			run.jianghu_credit += Tuning.new().credit_per_visit
 			var reward: Variant = UnlockRules.roll_unlock_reward(MetaSession.meta_state.meta_unlocked_pool, ty, _node_cfg_for(ty,node_id), run.rng_seed)
 			if reward != null and not run.unlocked_techniques.has(reward):
 				run.unlocked_techniques.append(reward)

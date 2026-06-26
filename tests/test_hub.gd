@@ -37,6 +37,48 @@ func test_continue_button_enabled_when_run_active():
 	remove_child(hub)
 	hub.queue_free()
 
+# —— T10 招募材料（信用）门槛 + 休整反馈（玩家验收）——
+
+func test_can_recruit_requires_credit_even_with_relation():
+	# F4 默认关系 40>=30，但信用 0 → 不可招（材料门槛）；攒够信用才可招
+	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()
+	add_child(hub)
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.jianghu_credit = 0
+	MetaSession.current_run = run
+	hub._refresh_status()
+	assert_true(int(run.faction_relations.get("F4", 0)) >= 30, "F4 默认关系达阈值（前置）")
+	assert_false(hub._can_recruit(), "信用 0 → 不可招（即便 F4 关系达标）")
+	run.jianghu_credit = Tuning.new().recruit_credit_cost
+	assert_true(hub._can_recruit(), "信用够 + F4 关系达阈值 → 可招")
+	remove_child(hub)
+	hub.queue_free()
+
+func test_recruit_deducts_credit():
+	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()
+	add_child(hub)
+	var run := RunFactory.init_run(MetaState.new_first_play(), 7)
+	run.jianghu_credit = 100
+	MetaSession.current_run = run
+	var cost := Tuning.new().recruit_credit_cost
+	var size_before := run.player_roster.size()
+	hub._on_recruit_faction("F4")
+	assert_eq(run.jianghu_credit, 100 - cost, "招募扣信用（材料）")
+	assert_eq(run.player_roster.size(), size_before + 1, "roster +1")
+	remove_child(hub)
+	hub.queue_free()
+
+func test_rest_shows_feedback():
+	# 玩家验收：镖局休整应有反馈文案
+	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()
+	add_child(hub)
+	MetaSession.current_run = _injured_run()   # hp 10 < max 20
+	hub._on_rest()
+	assert_true(hub._feedback.text.find("回血") >= 0 or hub._feedback.text.find("满血") >= 0,
+		"休整后 _feedback 有回血/满血文案（非静默）")
+	remove_child(hub)
+	hub.queue_free()
+
 func test_can_rest_true_when_roster_injured_and_cap_available():
 	# 损伤 + 配额可用 → _can_rest true，按钮可点
 	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()

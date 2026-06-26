@@ -254,3 +254,21 @@ func test_survive_loss_revives_protagonist_and_culls_dead_allies():
 	assert_eq(int(prot.get("opening", 99)), 0, "破绽清零")
 	assert_eq(run.player_roster.size(), 2, "死亡 ally 剔除（主角 + 存活 ally）")
 	assert_false(RunFlow.is_run_over(run), "主角活 → 局未结束（可继续闯）")
+
+# —— 已通关节点可回放（玩家验收：想重玩之前的节点）——
+
+func test_is_visited_and_enter_node_dedup():
+	var run := _run()   # current_node_id 在 L0
+	var m: Dictionary = run.chapter_maps[1]
+	var nxt: Array = MapGenerator.reachable_next(m, run.current_node_id)
+	assert_false(nxt.is_empty(), "L0 有后继节点")
+	var target := String(nxt[0])
+	assert_false(RunFlow.is_visited(run, target), "进入前 is_visited=false")
+	RunFlow.enter_node(run, target)
+	assert_true(RunFlow.is_visited(run, target), "进入后 is_visited=true")
+	# 回放：再次 enter 不应重复记录 nodes_visited
+	var visited: Array = run.chapter_progress[1]["nodes_visited"]
+	var count_before := visited.count(target)
+	RunFlow.enter_node(run, target)   # 模拟回放
+	var count_after := (run.chapter_progress[1]["nodes_visited"] as Array).count(target)
+	assert_eq(count_after, count_before, "回放已访问节点不重复记录 nodes_visited")

@@ -6,6 +6,7 @@ var _modifier_line: Label   # M3.5: 当局天象简述行
 var _btn_recruit: Button         # 招募同袍主按钮（刷新 disabled 用）
 var _btn_rest: Button             # 镖局休整（T10c：满血×rest_cap/章，免费）
 var _btn_continue: Button         # 继续闯荡（无进行中 run 时 disabled——防 permadeath 后静默 no-op）
+var _feedback: Label              # 操作反馈（休整/招募结果）
 var _recruit_panel: VBoxContainer # 派系子按钮列表（展开/收起）
 
 func _ready() -> void:
@@ -25,6 +26,10 @@ func _build_ui() -> void:
 	# —— M3.5: 当局天象（modifier）简述行 ——
 	_modifier_line = Label.new()
 	root.add_child(_modifier_line)
+	# —— T10 验收：操作反馈行（休整/招募结果等，否则点了没感觉）——
+	_feedback = Label.new()
+	_feedback.add_theme_color_override("font_color", Color(0.4, 0.9, 0.5))
+	root.add_child(_feedback)
 	_refresh_status()
 	var btn_new := Button.new(); btn_new.text = "开始新一局"
 	btn_new.pressed.connect(_on_new_run)
@@ -54,7 +59,7 @@ func _refresh_status() -> void:
 	var m := MetaSession.meta_state
 	_status.text = "镜照山·旧址 | 通关 %d 次 | 解锁招 %d 招" % [m.meta_runs_completed, m.meta_unlocked_pool.size()]
 	if MetaSession.current_run != null:
-		_status.text += " | 当前章 %d" % MetaSession.current_run.current_chapter
+		_status.text += " | 当前章 %d | 信用 %d" % [MetaSession.current_run.current_chapter, MetaSession.current_run.jianghu_credit]
 	# —— M3.5: 天象行 ——
 	if MetaSession.current_run != null and MetaSession.current_run.modifier_state.size() > 0:
 		_modifier_line.text = "天象：" + _modifier_brief(MetaSession.current_run.modifier_state)
@@ -87,8 +92,7 @@ func _modifier_brief(ms: Dictionary) -> String:
 	if ms.has("kit_stance_speed_bonus"): parts.append("厚土镇煞")
 	return ", ".join(parts) if not parts.is_empty() else "风平浪静"
 
-## 招募 gate：roster_cap 未满 且 至少一个派系关系达阈值（can_recruit，F8 不可招）。
-## roster_cap 默认 3（与 M2"队伍小 2-3"对齐）；「独行」modifier 可覆盖为更小。
+## 招募 gate：roster_cap 未满 + 信用够（材料）+ 至少一个派系关系达阈值（can_recruit，F8 不可招）。
 func _can_recruit() -> bool:
 	var run := MetaSession.current_run
 	if run == null:
@@ -97,6 +101,9 @@ func _can_recruit() -> bool:
 	if run.modifier_state.has("roster_cap"):
 		cap = int(run.modifier_state["roster_cap"])
 	if run.player_roster.size() >= cap:
+		return false
+	# T10 招募材料：需信用（访问节点挣）
+	if run.jianghu_credit < Tuning.new().recruit_credit_cost:
 		return false
 	# 至少一个派系可招，否则按钮亮着点开全灰
 	for fid in FactionData.recruit_factions():
@@ -116,11 +123,12 @@ func _refresh_recruit_panel() -> void:
 	var run := MetaSession.current_run
 	if run == null:
 		return
+	var cost := Tuning.new().recruit_credit_cost
 	for fid in FactionData.recruit_factions():
 		var rel: int = int(run.faction_relations.get(fid, 0))
 		var can: bool = FactionRelations.can_recruit(run.faction_relations, fid)
 		var btn := Button.new()
-		btn.text = "%s | 关系 %d | %s" % [FactionData.NAMES[fid], rel, "可招" if can else "不可招"]
+		btn.text = "%s | 关系 %d | 需 %d 信用 | %s" % [FactionData.NAMES[fid], rel, cost, "可招" if can else "不可招"]
 		btn.disabled = not can
 		btn.pressed.connect(_on_recruit_faction.bind(fid))
 		_recruit_panel.add_child(btn)
@@ -138,7 +146,10 @@ func _on_recruit_faction(fid: String) -> void:
 	var idx: int = run.player_roster.size()
 	if idx >= FactionData.PLAYER_SLOTS.size():
 		return   # 槽位耗尽兜底（roster_cap 应先达）
+	var cost := Tuning.new().recruit_credit_cost
+	run.jianghu_credit = maxi(0, run.jianghu_credit - cost)
 	run.player_roster.append(RunFactory._ally(fid, idx))
+	_set_feedback("✓ 招募 %s 同袍入队（耗 %d 信用，剩 %d）" % [FactionData.NAMES.get(fid, fid), cost, run.jianghu_credit])
 	_refresh_recruit_panel()
 	_refresh_status()   # 含 _btn_recruit.disabled 刷新
 
@@ -164,13 +175,33 @@ func _rest_button_text() -> String:
 	var left: int = maxi(0, cap - run.rest_used)
 	return "镖局休整（剩余 %d/%d）" % [left, cap]
 
-## 点「镖局休整」：调 RunFlow.rest 单一真源，刷新 UI（按钮 text/disabled 跟随）。
+## 点「镖局休整」：调 RunFlow.rest 单一真源，刷新 UI + 反馈（玩家验收：点了要有感觉）。
 func _on_rest() -> void:
 	var run := MetaSession.current_run
 	if run == null:
 		return
-	RunFlow.rest(run, Tuning.new())
+	var tuning := Tuning.new()
+	var healed_total := _roster_damage()
+	var ok := RunFlow.rest(run, tuning)
+	if ok:
+		var left := maxi(0, tuning.rest_cap_per_chapter - run.rest_used)
+		_set_feedback("✓ 镖局休整：队伍恢复满血（回血 %d，剩余配额 %d/%d）" % [healed_total, left, tuning.rest_cap_per_chapter])
+	elif run.rest_used >= tuning.rest_cap_per_chapter:
+		_set_feedback("✗ 本章休整配额已用完（章末 boss 推进后重置）")
+	else:
+		_set_feedback("（队伍满血，无需休整）")
 	_refresh_status()
+
+## roster 当前总损伤量（满血回血量，供反馈显示）。
+func _roster_damage() -> int:
+	var dmg := 0
+	for pd in MetaSession.current_run.player_roster:
+		dmg += maxi(0, int(pd.get("max_hp", 0)) - int(pd.get("hp", 0)))
+	return dmg
+
+func _set_feedback(text: String) -> void:
+	if _feedback != null:
+		_feedback.text = text
 
 func _on_new_run() -> void:
 	var seed := 7
