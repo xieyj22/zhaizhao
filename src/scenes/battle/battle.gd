@@ -319,4 +319,6 @@ func _on_back_after_battle() -> void:
 	var ty: String = m["nodes"].get(run.current_node_id, {}).get("type", "")
 	if ty == "boss" and oc == BattleState.Outcome.TEAM0_WIN:
 		RunFlow.on_boss_defeated(run)
+		if RunFlow.can_advance_chapter(run):
+			RunFlow.advance_chapter(run)
 	get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")

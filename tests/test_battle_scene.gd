@@ -106,6 +106,50 @@ func test_battle_constructs_from_run_state():
 	MetaSession.current_run = null
 	MetaSession.current_node_cfg = {}
 
+func test_boss_win_advances_chapter():
+	# T8 集成：boss 胜 → _on_back_after_battle → advance_chapter → 章2 图生成
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)   # 章1，chapter_maps[1] 已生成
+	# 在章1 图里找到 type=="boss" 的节点 id，设 current_node_id
+	var boss_node_id := ""
+	for id in run.chapter_maps[1]["nodes"]:
+		if String(run.chapter_maps[1]["nodes"][id].get("type", "")) == "boss":
+			boss_node_id = String(id)
+			break
+	assert_ne(boss_node_id, "", "章1 图应有 boss 节点")
+	run.current_node_id = boss_node_id
+	MetaSession.current_run = run
+	MetaSession.last_battle_outcome = BattleState.Outcome.TEAM0_WIN   # _on_back_after_battle 读它判 boss 胜
+	# 主角存活（init_run 默认存活）→ is_run_over 为 false，走"继续"分支
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	battle._on_back_after_battle()   # 真实入口（change_scene_to_file 延迟到帧末，断言时未发生）
+	assert_eq(MetaSession.current_run.current_chapter, 2, "boss 胜后推进到章2")
+	assert_true(MetaSession.current_run.chapter_maps.has(2), "章2 图已由 advance_chapter 生成")
+	remove_child(battle)
+	battle.queue_free()
+	# 清理全局态
+	MetaSession.current_run = null
+	MetaSession.current_node_cfg = {}
+	MetaSession.last_battle_outcome = 0
+
+func test_boss_battle_has_boss_traits_injected():
+	# 便宜测：boss node_cfg 构造的 battle，state.boss_traits 非空（验证 trait 接入点 live）
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	MetaSession.current_run = run
+	MetaSession.current_node_cfg = {"boss_id":"zongzhenglie","node_type":"boss","enemies":[
+		{"id":"zongzhenglie","faction":"F2","personality":"brute","grid_pos":[5,3],
+		 "stance":Stance.Id.METAL,"kit":["chifeng_lianci","chifeng_yajin"]}
+	]}
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	assert_true(battle.state.boss_traits.has("zongzhenglie"), "boss 战注入 boss_traits（mind_eye/iron_body 接入点）")
+	remove_child(battle)
+	battle.queue_free()
+	MetaSession.current_run = null
+	MetaSession.current_node_cfg = {}
+
 func test_retreat_button_present_and_visible_during_battle():
 	# 撤退按钮：战斗中存在且可见（game_over 后由 _on_reveal hide）
 	var meta := MetaState.new_first_play()
