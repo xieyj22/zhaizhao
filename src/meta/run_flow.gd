@@ -138,6 +138,21 @@ static func cull_dead_allies(run: RunState) -> void:
 			alive_roster.append(pd)
 	run.player_roster = alive_roster
 
+## 普通节点败北残息（option B 软失败）：主角复活到 1 血（残息），破绽/崩溃清零，死亡非主角队友剔除。
+## 仅用于非 boss 节点败北——boss 败北仍走 permadeath（is_run_over→commit_run_to_meta），boss 是致命威胁。
+## 纯函数改 run，不持久化。调用方（battle.gd/harness）在非 boss 败北后调，随后回 hub 休整续闯。
+static func survive_loss(run: RunState) -> void:
+	for i in range(run.player_roster.size()):
+		var pd: Dictionary = run.player_roster[i]
+		if bool(pd.get("is_protagonist", false)):
+			pd["hp"] = 1
+			pd["alive"] = true
+			pd["guard_broken"] = false
+			pd["opening"] = 0
+			run.player_roster[i] = pd
+			break
+	cull_dead_allies(run)
+
 ## 进入章节图：若 current_node_id 为空（在 hub），定位到当前章 L0 起点节点。
 ## 幂等——已在某节点时（如战斗后返回 map）不动。map 场景 _ready 调用。
 ## 修 bug：init_run 设 current_node_id="" 进 map 后 can_advance_node 全 false（无边 from=""）→ 节点全 disabled。

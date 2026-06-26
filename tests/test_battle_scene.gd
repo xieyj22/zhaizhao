@@ -5,6 +5,7 @@ func after_each():
 	# 绝不能漏进 2v2 fallback 测试——后者依赖 current_run == null）
 	MetaSession.current_run = null
 	MetaSession.current_node_cfg = {}
+	MetaSession.last_battle_outcome = BattleState.Outcome.ONGOING
 
 func test_2v2_pick_reveal_ai_drive_ends_with_outcome():
 	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
@@ -249,3 +250,51 @@ func test_mind_eye_predictions_forwarded_to_orch_after_reveal():
 	battle.queue_free()
 	MetaSession.current_run = null
 	MetaSession.current_node_cfg = {}
+
+# —— option B 软失败：败北分流（普通节点残息 / boss permadeath）——
+
+func test_regular_node_loss_survives_run_continues():
+	# 普通节点败 → 主角残息 1 血，current_run 保留（回 hub 续闯，非 permadeath）
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	var m: Dictionary = run.chapter_maps[1]
+	var duel_id := ""
+	for id in m["nodes"]:
+		if String(m["nodes"][id].get("type", "")) == "duel":
+			duel_id = String(id); break
+	assert_ne(duel_id, "", "章 1 有 duel 节点")
+	run.current_node_id = duel_id
+	run.player_roster[0]["hp"] = 0
+	run.player_roster[0]["alive"] = false
+	MetaSession.current_run = run
+	MetaSession.last_battle_outcome = BattleState.Outcome.TEAM1_WIN
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	battle._on_back_after_battle()
+	assert_ne(MetaSession.current_run, null, "普通节点败 → current_run 保留（局继续）")
+	if MetaSession.current_run != null:
+		assert_eq(int(MetaSession.current_run.player_roster[0]["hp"]), 1, "主角残息复活到 1 血")
+	remove_child(battle)
+	battle.queue_free()
+
+func test_boss_loss_is_permadeath():
+	# boss 败 = 致命 → permadeath（局结束，current_run null）
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	var m: Dictionary = run.chapter_maps[1]
+	var boss_id := ""
+	for id in m["nodes"]:
+		if String(m["nodes"][id].get("type", "")) == "boss":
+			boss_id = String(id); break
+	assert_ne(boss_id, "", "章 1 有 boss 节点")
+	run.current_node_id = boss_id
+	run.player_roster[0]["hp"] = 0
+	run.player_roster[0]["alive"] = false
+	MetaSession.current_run = run
+	MetaSession.last_battle_outcome = BattleState.Outcome.TEAM1_WIN
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	battle._on_back_after_battle()
+	assert_eq(MetaSession.current_run, null, "boss 败 → permadeath（current_run null）")
+	remove_child(battle)
+	battle.queue_free()

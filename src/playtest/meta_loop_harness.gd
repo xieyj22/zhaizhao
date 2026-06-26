@@ -211,6 +211,9 @@ static func _fight_battle(run: RunState, node_type: String, node_id: String,
 	res.total_battle_turns += turns
 	# boss 结果：TEAM0_WIN→通关推进；DRAW→单独 outcome（旧实现误并入 stalled）
 	var oc := s.outcome(tuning)
+	# option B 软失败镜像：普通节点败北 → 主角残息续跑（boss 败仍由下轮 is_run_over 判死→protagonist_dead）
+	if oc == BattleState.Outcome.TEAM1_WIN and node_type != "boss":
+		RunFlow.survive_loss(run)
 	if node_type == "boss":
 		match oc:
 			BattleState.Outcome.TEAM0_WIN:

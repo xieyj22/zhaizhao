@@ -223,3 +223,34 @@ func test_advance_chapter_resets_rest_used():
 	run.chapter_progress[1]["bosses_defeated"] = ["hailianzheng"]
 	RunFlow.advance_chapter(run)
 	assert_eq(run.rest_used, 0, "进新章 rest_used 重置 0（唯一真源）")
+
+# —— option B 软失败：普通节点败北残息 ——
+
+func _dead_roster() -> Array:
+	# 主角(死)+ 死队友 + 存活队友
+	return [
+		{"id":"protagonist","team":0,"hp":0,"max_hp":34,"opening":3,"max_opening":6,
+		 "stance":0,"grid_pos":[1,3],"facing":0,"guard_broken":true,"alive":false,
+		 "kit_ids":[],"is_protagonist":true},
+		{"id":"ally_dead","team":0,"hp":0,"max_hp":26,"opening":0,"max_opening":6,
+		 "stance":0,"grid_pos":[1,2],"facing":0,"guard_broken":false,"alive":false,
+		 "kit_ids":[],"is_protagonist":false},
+		{"id":"ally_alive","team":0,"hp":10,"max_hp":26,"opening":0,"max_opening":6,
+		 "stance":0,"grid_pos":[1,4],"facing":0,"guard_broken":false,"alive":true,
+		 "kit_ids":[],"is_protagonist":false},
+	]
+
+func test_survive_loss_revives_protagonist_and_culls_dead_allies():
+	var run := RunState.new()
+	run.player_roster = _dead_roster()
+	RunFlow.survive_loss(run)
+	var prot: Dictionary = {}
+	for pd in run.player_roster:
+		if bool(pd.get("is_protagonist", false)):
+			prot = pd
+	assert_eq(int(prot["hp"]), 1, "主角残息复活到 1 血")
+	assert_true(bool(prot.get("alive", false)), "主角 alive=true")
+	assert_false(bool(prot.get("guard_broken", true)), "崩溃清除")
+	assert_eq(int(prot.get("opening", 99)), 0, "破绽清零")
+	assert_eq(run.player_roster.size(), 2, "死亡 ally 剔除（主角 + 存活 ally）")
+	assert_false(RunFlow.is_run_over(run), "主角活 → 局未结束（可继续闯）")

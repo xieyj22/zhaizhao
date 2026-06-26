@@ -309,7 +309,23 @@ func _on_back_after_battle() -> void:
 	if run == null:
 		get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")
 		return
-	# permadeath（T4 §7.1）：主角阵亡 → 局结束，meta 沉淀（解锁招并入池，runs_completed 不增），回 hub。
+	var oc := MetaSession.last_battle_outcome
+	var m: Dictionary = run.chapter_maps[run.current_chapter]
+	var ty: String = m["nodes"].get(run.current_node_id, {}).get("type", "")
+	# —— option B 软失败：败北分流（须在 is_run_over 前——败北主角已死）——
+	# boss 败 = 致命 → permadeath（局结束）；普通节点败 = 残息（主角 1 血复活）回 hub 续闯。
+	if oc == BattleState.Outcome.TEAM1_WIN:
+		if ty == "boss":
+			var meta := MetaState.commit_run_to_meta(MetaSession.meta_state, run, false)
+			MetaState.save_to(meta)
+			MetaSession.meta_state = meta
+			MetaSession.current_run = null
+			get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")
+			return
+		RunFlow.survive_loss(run)
+		get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")
+		return
+	# permadeath（T4 §7.1）：主角阵亡 → 局结束（胜/平不应触发，守护）。
 	if RunFlow.is_run_over(run):
 		var meta := MetaState.commit_run_to_meta(MetaSession.meta_state, run, false)
 		MetaState.save_to(meta)
@@ -318,15 +334,10 @@ func _on_back_after_battle() -> void:
 		get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn")
 		return
 	# 存活 → 继续：boss 胜则标记，回 map
-	var oc := MetaSession.last_battle_outcome
-	var m: Dictionary = run.chapter_maps[run.current_chapter]
-	var ty: String = m["nodes"].get(run.current_node_id, {}).get("type", "")
 	if ty == "boss" and oc == BattleState.Outcome.TEAM0_WIN:
 		RunFlow.on_boss_defeated(run)
 		if RunFlow.can_advance_chapter(run):
 			# —— T10e Bug C：ch4 掌门胜 = 通关（不再 advance 到幻影 ch5）——
-			# 修复前无 MAX_CHAPTER 守卫：advance_chapter → current_chapter=5 + generate_map(5) 炸。
-			# 现镜像 permadeath 分支：commit run_won=true（meta_runs_completed+1），清 current_run，回 hub。
 			if run.current_chapter >= RunFlow.MAX_CHAPTER:
 				var meta := MetaState.commit_run_to_meta(MetaSession.meta_state, run, true)
 				MetaState.save_to(meta)
