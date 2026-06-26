@@ -277,6 +277,36 @@ func test_regular_node_loss_survives_run_continues():
 	remove_child(battle)
 	battle.queue_free()
 
+func test_retreat_restores_previous_position():
+	# 撤退（本场不算）→ 回到进战前位置，战节点移出 visited（玩家可换打别的节点，如同层兄弟）
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	var m: Dictionary = run.chapter_maps[1]
+	var l0 := ""
+	for id in m["nodes"]:
+		if int(m["nodes"][id].get("layer", -1)) == 0:
+			l0 = String(id); break
+	run.current_node_id = l0
+	var l1_duel := ""
+	for id in m["nodes"]:
+		if String(m["nodes"][id].get("type", "")) == "duel" and RunFlow.can_advance_node(run, String(id)):
+			l1_duel = String(id); break
+	assert_ne(l1_duel, "", "L0 有可达 duel 节点")
+	# 模拟 map._on_enter_node：快照 previous + enter（移到战节点、记 visited）
+	MetaSession.previous_node_id = run.current_node_id
+	RunFlow.enter_node(run, l1_duel)
+	assert_eq(run.current_node_id, l1_duel, "进战后 current 在战节点")
+	assert_true(RunFlow.is_visited(run, l1_duel), "进战记 visited")
+	MetaSession.current_run = run
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	battle._on_retreat()
+	assert_eq(run.current_node_id, l0, "撤退后回到进战前位置（L0）→ 可再选同层兄弟节点")
+	assert_false(RunFlow.is_visited(run, l1_duel), "撤退后战节点移出 visited（未通关不标 ✓）")
+	remove_child(battle)
+	battle.queue_free()
+	MetaSession.previous_node_id = ""
+
 func test_back_button_positioned_outside_scroll_rect():
 	# 回归（验收 bug）：game-over 的 back 按钮不得落在右侧 _scroll 矩形内
 	# （ScrollContainer mouse_filter=STOP 会吞点击 → "主角阵亡-回大本营"点不到）

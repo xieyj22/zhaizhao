@@ -301,9 +301,19 @@ static func _find_unit(s: BattleState, id_str: String) -> UnitState:
 			return u
 	return null
 
-## 撤退：本场不算（不调 _write_back_result → roster 保持进战前状态），回地图重选节点。
-## game_over 后按钮已 hide，不会走到。current_node_id 仍在战斗节点，回 map 可重进或绕路。
+## 撤退：本场不算（不调 _write_back_result → roster 保持进战前状态），回地图。
+## 回到进战前的位置（previous_node_id），并把刚进入未通关的节点从 nodes_visited 移除——
+## 否则 current_node_id 停在战节点，只能沿其 DAG 后继走，换不了同层兄弟节点（玩家验收）。
 func _on_retreat() -> void:
+	var run := MetaSession.current_run
+	if run != null:
+		var retreated: String = run.current_node_id
+		run.current_node_id = MetaSession.previous_node_id
+		var cp: Dictionary = run.chapter_progress.get(run.current_chapter, {"bosses_defeated": [], "nodes_visited": []})
+		var visited: Array = cp.get("nodes_visited", [])
+		visited.erase(retreated)   # 未通关不算已访问（不标 ✓）
+		cp["nodes_visited"] = visited
+		run.chapter_progress[run.current_chapter] = cp
 	get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")
 
 func _on_back_after_battle() -> void:

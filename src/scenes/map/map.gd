@@ -78,6 +78,8 @@ func _on_current_clicked() -> void:
 
 func _on_enter_node(node_id: String) -> void:
 	var run := MetaSession.current_run
+	# 快照进战前位置——撤退（本场不算）时回到此，玩家可换打别的节点（玩家验收）
+	MetaSession.previous_node_id = run.current_node_id
 	RunFlow.enter_node(run, node_id)
 	var ty: String = run.chapter_maps[run.current_chapter]["nodes"][node_id]["type"]
 	match ty:
