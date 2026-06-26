@@ -20,6 +20,23 @@ func _injured_run() -> RunState:
 	run.rest_used = 0
 	return run
 
+func test_continue_button_disabled_when_no_run():
+	# 玩家验收：permadeath 后 current_run=null，"继续闯荡"应 disabled（此前可点但静默 no-op）
+	MetaSession.current_run = null
+	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()
+	add_child(hub)
+	assert_true(hub._btn_continue.disabled, "无进行中闯荡 → 继续闯荡 disabled（非静默 no-op）")
+	remove_child(hub)
+	hub.queue_free()
+
+func test_continue_button_enabled_when_run_active():
+	MetaSession.current_run = RunFactory.init_run(MetaState.new_first_play(), 7)
+	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()
+	add_child(hub)
+	assert_false(hub._btn_continue.disabled, "有进行中闯荡 → 继续闯荡 可点")
+	remove_child(hub)
+	hub.queue_free()
+
 func test_can_rest_true_when_roster_injured_and_cap_available():
 	# 损伤 + 配额可用 → _can_rest true，按钮可点
 	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()

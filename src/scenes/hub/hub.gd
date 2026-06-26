@@ -5,6 +5,7 @@ var _status: Label
 var _modifier_line: Label   # M3.5: 当局天象简述行
 var _btn_recruit: Button         # 招募同袍主按钮（刷新 disabled 用）
 var _btn_rest: Button             # 镖局休整（T10c：满血×rest_cap/章，免费）
+var _btn_continue: Button         # 继续闯荡（无进行中 run 时 disabled——防 permadeath 后静默 no-op）
 var _recruit_panel: VBoxContainer # 派系子按钮列表（展开/收起）
 
 func _ready() -> void:
@@ -25,9 +26,11 @@ func _build_ui() -> void:
 	var btn_new := Button.new(); btn_new.text = "开始新一局"
 	btn_new.pressed.connect(_on_new_run)
 	root.add_child(btn_new)
-	var btn_cont := Button.new(); btn_cont.text = "继续闯荡（节点图）"
-	btn_cont.pressed.connect(_on_open_map)
-	root.add_child(btn_cont)
+	_btn_continue = Button.new()
+	_btn_continue.text = "继续闯荡（节点图）"
+	_btn_continue.disabled = MetaSession.current_run == null   # permadeath/未开局 → disabled（非静默 no-op）
+	_btn_continue.pressed.connect(_on_open_map)
+	root.add_child(_btn_continue)
 	# —— 招募同袍：点开展开派系按钮列表（实装，替代 M3 占位）——
 	_btn_recruit = Button.new()
 	_btn_recruit.text = "招募同袍"
@@ -61,6 +64,9 @@ func _refresh_status() -> void:
 	if _btn_rest != null:
 		_btn_rest.text = _rest_button_text()
 		_btn_rest.disabled = not _can_rest()
+	# 继续闯荡按钮 disabled 当无进行中 run（permadeath 后 / 未开局）
+	if _btn_continue != null:
+		_btn_continue.disabled = MetaSession.current_run == null
 
 ## M3.5: modifier_state → 中文简述（hook 反推；M4 可换 modifier_ids 反查 POOL 取 name/desc）。
 ## 用 hook 键而非 id（meta UI 展示的是「效果」而非「名字」，避免 meta 改 POOL 文案时此处失同步）。
