@@ -93,6 +93,27 @@ static func advance_chapter(run: RunState) -> void:
 	run.chapter_progress[next_chapter] = {"bosses_defeated": [], "nodes_visited": []}
 	run.current_chapter = next_chapter
 	run.current_node_id = ""   # 进新章回 hub（map 场景 _ready 调 place_at_chapter_start 重定位）
+	run.rest_used = 0   # 新章休整配额重置（rest_used 重置的唯一真源；T10c）
+
+## 镖局休整：每章 rest_cap_per_chapter 次满血恢复全员。配额用完或全员满血→不消耗。
+## 返回 true=已休整（回血+rest_used++），false=未休整（配额满或无损伤）。
+## rest_used 的重置唯一真源在 advance_chapter（进新章配额清零）。纯函数无 rng。
+static func rest(run: RunState, tuning: Tuning) -> bool:
+	if run.rest_used >= tuning.rest_cap_per_chapter:
+		return false
+	var need := false
+	for pd in run.player_roster:
+		if int(pd.get("hp", 0)) < int(pd.get("max_hp", 0)):
+			need = true
+			break
+	if not need:
+		return false
+	for i in range(run.player_roster.size()):
+		var pd: Dictionary = run.player_roster[i]
+		pd["hp"] = int(pd.get("max_hp", 0))
+		run.player_roster[i] = pd
+	run.rest_used += 1
+	return true
 
 ## permadeath：主角死 = 局结束（T4 §7.1：主角死亡→单 run 结束，meta 保留→回 hub）。
 ## battle.gd 战斗后据此判定回 hub（commit meta）还是回 map（继续）。

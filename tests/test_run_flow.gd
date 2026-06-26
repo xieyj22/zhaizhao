@@ -176,3 +176,50 @@ func test_cull_dead_allies_keeps_dead_protagonist():
 	RunFlow.cull_dead_allies(run)
 	assert_eq(run.player_roster.size(), 1, "主角（死）保留——供 is_run_over 判定")
 	assert_true(RunFlow.is_run_over(run), "主角死 → 局结束（cull 后仍可判）")
+
+# —— T10c: 镖局休整（RunFlow.rest 单一真源）——
+# rest 语义：每章 rest_cap_per_chapter 次满血休整。配额满或全员满血→不消耗。
+
+func _rest_run(hp: int, max_hp: int, rest_used: int) -> RunState:
+	# 合成带一个主角的 roster（hp/max_hp/rest_used 可配）
+	var run := _run()
+	run.player_roster = [{
+		"id":"protagonist","team":0,"hp":hp,"max_hp":max_hp,
+		"opening":0,"max_opening":6,"stance":0,"grid_pos":[1,3],
+		"facing":0,"guard_broken":false,"alive":true,
+		"kit_ids":["tongshi_jinda"],"is_protagonist":true,
+	}]
+	run.rest_used = rest_used
+	return run
+
+func test_rest_heals_roster_and_increments_used():
+	# roster 损伤 + rest_used<cap → 满血 + rest_used+1，返回 true
+	var run := _rest_run(10, 20, 0)
+	var healed: bool = RunFlow.rest(run, Tuning.new())
+	assert_true(healed, "损伤+配额可用 → 已休整（true）")
+	assert_eq(int(run.player_roster[0]["hp"]), 20, "主角满血")
+	assert_eq(run.rest_used, 1, "rest_used +1")
+
+func test_rest_noop_when_cap_reached():
+	# rest_used==cap → 返回 false、hp 不变、rest_used 仍 cap
+	var run := _rest_run(10, 20, 2)   # cap=2 已用满
+	var healed: bool = RunFlow.rest(run, Tuning.new())
+	assert_false(healed, "配额用满 → 未休整（false）")
+	assert_eq(int(run.player_roster[0]["hp"]), 10, "配额满不回血")
+	assert_eq(run.rest_used, 2, "rest_used 不增")
+
+func test_rest_noop_when_full_hp():
+	# 满血 → 不消耗配额（无需休整），返回 false
+	var run := _rest_run(20, 20, 0)
+	var healed: bool = RunFlow.rest(run, Tuning.new())
+	assert_false(healed, "满血 → 未休整（false）")
+	assert_eq(int(run.player_roster[0]["hp"]), 20, "满血保持")
+	assert_eq(run.rest_used, 0, "满血不消耗配额")
+
+func test_advance_chapter_resets_rest_used():
+	# advance_chapter 末尾重置 rest_used=0（rest_used 重置的唯一真源）
+	var run := _run()
+	run.rest_used = 2   # 当章已用满
+	run.chapter_progress[1]["bosses_defeated"] = ["hailianzheng"]
+	RunFlow.advance_chapter(run)
+	assert_eq(run.rest_used, 0, "进新章 rest_used 重置 0（唯一真源）")

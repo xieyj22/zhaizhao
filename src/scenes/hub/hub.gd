@@ -4,6 +4,7 @@ var _layer: CanvasLayer
 var _status: Label
 var _modifier_line: Label   # M3.5: 当局天象简述行
 var _btn_recruit: Button         # 招募同袍主按钮（刷新 disabled 用）
+var _btn_rest: Button             # 镖局休整（T10c：满血×rest_cap/章，免费）
 var _recruit_panel: VBoxContainer # 派系子按钮列表（展开/收起）
 
 func _ready() -> void:
@@ -36,6 +37,12 @@ func _build_ui() -> void:
 	_recruit_panel = VBoxContainer.new()
 	_recruit_panel.visible = false
 	root.add_child(_recruit_panel)
+	# —— T10c: 镖局休整（每章满血×rest_cap，免费）——
+	_btn_rest = Button.new()
+	_btn_rest.text = _rest_button_text()
+	_btn_rest.disabled = not _can_rest()
+	_btn_rest.pressed.connect(_on_rest)
+	root.add_child(_btn_rest)
 
 func _refresh_status() -> void:
 	var m := MetaSession.meta_state
@@ -50,6 +57,10 @@ func _refresh_status() -> void:
 	# 招募按钮 disabled 跟随状态（从 map/battle 返 hub 时刷新）
 	if _btn_recruit != null:
 		_btn_recruit.disabled = not _can_recruit()
+	# T10c: 休整按钮 text/disabled 跟随 rest_used + roster 损伤
+	if _btn_rest != null:
+		_btn_rest.text = _rest_button_text()
+		_btn_rest.disabled = not _can_rest()
 
 ## M3.5: modifier_state → 中文简述（hook 反推；M4 可换 modifier_ids 反查 POOL 取 name/desc）。
 ## 用 hook 键而非 id（meta UI 展示的是「效果」而非「名字」，避免 meta 改 POOL 文案时此处失同步）。
@@ -121,6 +132,36 @@ func _on_recruit_faction(fid: String) -> void:
 	run.player_roster.append(RunFactory._ally(fid, idx))
 	_refresh_recruit_panel()
 	_refresh_status()   # 含 _btn_recruit.disabled 刷新
+
+## T10c: 镖局休整 gate——配额未满 且 roster 有损伤。
+func _can_rest() -> bool:
+	var run := MetaSession.current_run
+	if run == null:
+		return false
+	var cap: int = Tuning.new().rest_cap_per_chapter
+	if run.rest_used >= cap:
+		return false
+	for pd in run.player_roster:
+		if int(pd.get("hp", 0)) < int(pd.get("max_hp", 0)):
+			return true
+	return false
+
+## 休整按钮文案：显示剩余次数（cap - rest_used）。
+func _rest_button_text() -> String:
+	var run := MetaSession.current_run
+	if run == null:
+		return "休整（无进行中闯荡）"
+	var cap: int = Tuning.new().rest_cap_per_chapter
+	var left: int = maxi(0, cap - run.rest_used)
+	return "镖局休整（剩余 %d/%d）" % [left, cap]
+
+## 点「镖局休整」：调 RunFlow.rest 单一真源，刷新 UI（按钮 text/disabled 跟随）。
+func _on_rest() -> void:
+	var run := MetaSession.current_run
+	if run == null:
+		return
+	RunFlow.rest(run, Tuning.new())
+	_refresh_status()
 
 func _on_new_run() -> void:
 	var seed := 7
