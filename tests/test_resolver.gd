@@ -87,6 +87,20 @@ func test_move_changes_position_and_clamps():
 	Resolver.resolve([Resolver.Action.new(a, mv, Vector2i.ZERO)], s, tu)
 	assert_eq(a.grid_pos, Vector2i(0,0), "越界被 clamp 回 (0,0)")
 
+func test_move_blocked_when_target_cell_occupied():
+	# 战棋不重合：MOVE 目标格被其他存活单位占据 → 阻挡，留原地（玩家验收反馈"不要两个战棋重合"）
+	var a := _mk(&"a", 0, Vector2i(1,1), Stance.Id.METAL)
+	var b := _mk(&"b", 1, Vector2i(3,1), Stance.Id.WOOD)   # b 占据 a 右边两格
+	var s := BattleState.new(); s.units = [a, b]
+	var mv := Technique.new()
+	mv.type = Technique.Type.MOVE
+	mv.speed = 5
+	mv.move_delta = Vector2i(2, 0)   # a 想从 (1,1) → (3,1)，被 b 占据
+	mv.resulting_stance = Stance.Id.METAL
+	Resolver.resolve([Resolver.Action.new(a, mv, Vector2i.ZERO)], s, tu)
+	assert_eq(a.grid_pos, Vector2i(1,1), "目标格被 b 占据 → a 被阻挡留原地（不重合）")
+	assert_eq(b.grid_pos, Vector2i(3,1), "b 不动")
+
 func test_result_carries_log():
 	var a := _mk(&"a", 0, Vector2i(1,1), Stance.Id.METAL)
 	var b := _mk(&"b", 1, Vector2i(2,1), Stance.Id.WOOD)

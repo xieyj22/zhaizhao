@@ -89,8 +89,14 @@ static func _apply_one(a: Action, state: BattleState, tuning: Tuning, result: Re
 	var t: Technique = a.technique
 	match t.type:
 		Technique.Type.MOVE:
-			u.grid_pos = state.clamp_to_grid(u.grid_pos + t.move_delta)
-			result.log.append("%s 移动到 %s" % [String(u.id), u.grid_pos])
+			var dest := state.clamp_to_grid(u.grid_pos + t.move_delta)
+			var blocker: UnitState = state.unit_at(dest)
+			if blocker != null and blocker != u:
+				# 目标格被其他存活单位占据 → 阻挡，留原地（玩家验收：战棋不可重合）
+				result.log.append("%s 移动被阻挡（%s 占据 %s）" % [String(u.id), String(blocker.id), dest])
+			else:
+				u.grid_pos = dest
+				result.log.append("%s 移动到 %s" % [String(u.id), u.grid_pos])
 		Technique.Type.STANCE_SWITCH:
 			# 仅切架势，不造成效果
 			result.log.append("%s 切换架势" % String(u.id))
