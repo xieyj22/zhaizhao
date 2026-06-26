@@ -9,7 +9,10 @@ var _btn_continue: Button         # 继续闯荡（无进行中 run 时 disabled
 var _recruit_panel: VBoxContainer # 派系子按钮列表（展开/收起）
 
 func _ready() -> void:
-	MetaSession.meta_state = MetaState.load_from()
+	# 用 autoload 已加载的 meta_state（battle.gd commit/通关后即时更新内存态）；
+	# 仅在未加载时读盘——避免覆盖刚 commit 的 meta（如通关计数）。
+	if MetaSession.meta_state == null:
+		MetaSession.meta_state = MetaState.load_from()
 	_build_ui()
 
 func _build_ui() -> void:

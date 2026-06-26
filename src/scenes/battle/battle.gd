@@ -271,7 +271,9 @@ func _on_reveal() -> void:
 		_write_back_result(oc)
 		var back := Button.new()
 		back.text = "主角阵亡 — 回大本营" if oc == BattleState.Outcome.TEAM1_WIN else "返回"
-		back.position = Vector2(528, 700)
+		# 左侧（retreat 已 hide 让位）+ 设最小尺寸——勿放 528+，会被右侧 _scroll 遮挡吞点击（验收 bug）
+		back.position = Vector2(40, 700)
+		back.custom_minimum_size = Vector2(260, 40)
 		back.pressed.connect(_on_back_after_battle)
 		_layer.add_child(back)
 

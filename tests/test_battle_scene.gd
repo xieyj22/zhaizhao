@@ -277,6 +277,42 @@ func test_regular_node_loss_survives_run_continues():
 	remove_child(battle)
 	battle.queue_free()
 
+func test_back_button_positioned_outside_scroll_rect():
+	# 回归（验收 bug）：game-over 的 back 按钮不得落在右侧 _scroll 矩形内
+	# （ScrollContainer mouse_filter=STOP 会吞点击 → "主角阵亡-回大本营"点不到）
+	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
+	add_child(battle)
+	var guard := 0
+	while battle.state.outcome(battle.tuning) == BattleState.Outcome.ONGOING and guard < 30:
+		for u in battle.state.units:
+			if u.team == 0 and u.alive:
+				var best = null
+				var best_d := 1 << 30
+				for e in battle.state.units:
+					if e.team != 0 and e.alive:
+						var d := RangeBand.distance(u.grid_pos, e.grid_pos)
+						if d < best_d:
+							best_d = d; best = e
+				if best != null:
+					battle._on_pick_target(u, TechniqueKit.strike_far(), best.grid_pos)
+		battle._on_reveal()
+		guard += 1
+	# 战斗结束 → back 按钮已由 _on_reveal 创建。在 _layer 子节点里找它
+	var back_btn: Button = null
+	for c in battle._layer.get_children():
+		if c is Button:
+			var t := String((c as Button).text)
+			if t.find("回大本营") >= 0 or t == "返回":
+				back_btn = c
+				break
+	assert_not_null(back_btn, "game-over back 按钮已创建")
+	if back_btn != null:
+		# 右侧 _scroll 矩形 x[528,860]——back 按钮必须在其外才不被吞点击
+		assert_true(back_btn.position.x < 528.0 or back_btn.position.x > 860.0,
+			"back 按钮不在 _scroll 矩形内（防 ScrollContainer 遮挡吞点击）")
+	remove_child(battle)
+	battle.queue_free()
+
 func test_boss_loss_is_permadeath():
 	# boss 败 = 致命 → permadeath（局结束，current_run null）
 	var meta := MetaState.new_first_play()
