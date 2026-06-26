@@ -54,8 +54,8 @@ func test_apply_init_hooks_max_hp_mult():
 	var run := RunFactory.init_run(meta, 7)
 	run.modifier_state = {"max_hp_mult":1.5}
 	RunFactory.apply_init_hooks(run, meta)
-	assert_eq(run.player_roster[0]["max_hp"], 30, "20*1.5=30")
-	assert_eq(run.player_roster[0]["hp"], 30)
+	assert_eq(run.player_roster[0]["max_hp"], 51, "34*1.5=51（T10f 调平：主角 hp 20→34）")
+	assert_eq(run.player_roster[0]["hp"], 51)
 
 func test_apply_init_hooks_empty_is_noop():
 	# 边界守护：空 modifier_state → 不改 relation/hp
@@ -109,8 +109,8 @@ func test_ally_stance_from_faction():
 	assert_eq(RunFactory._ally("F1", 1)["stance"], Stance.Id.METAL)
 
 func test_ally_hp_below_protagonist():
-	# 叙事守护：队友略脆（< 主角 20）
-	assert_lt(int(RunFactory._ally("F4", 1)["max_hp"]), 20)
+	# 叙事守护：队友略脆（< 主角）
+	assert_lt(int(RunFactory._ally("F4", 1)["max_hp"]), int(RunFactory._protagonist([])["max_hp"]), "队友 max_hp < 主角")
 	assert_eq(int(RunFactory._ally("F4", 1)["hp"]), int(RunFactory._ally("F4", 1)["max_hp"]), "满血招募")
 
 func test_ally_json_safe_roundtrip():
@@ -136,7 +136,7 @@ func test_apply_init_hooks_max_hp_mult_affects_allies():
 	var meta := MetaState.new_first_play()
 	var run := RunFactory.init_run(meta, 7)
 	run.player_roster.append(RunFactory._ally("F4", 1))
-	var ally_hp_before: int = int(run.player_roster[1]["max_hp"])   # 18
+	var ally_hp_before: int = int(run.player_roster[1]["max_hp"])   # 26（T10f 调平）
 	run.modifier_state = {"max_hp_mult":1.5}
 	RunFactory.apply_init_hooks(run, meta)
-	assert_eq(int(run.player_roster[1]["max_hp"]), 27, "队友 18*1.5=27（遍历全 roster）")
+	assert_eq(int(run.player_roster[1]["max_hp"]), 39, "队友 26*1.5=39（遍历全 roster）")

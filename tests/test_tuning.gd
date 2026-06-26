@@ -36,6 +36,6 @@ func test_l2_defaults():
 
 func test_m35_replay_constants():
 	var t := Tuning.new()
-	assert_eq(t.rest_cap_per_chapter, 2, "镖局休整限 2/章")
+	assert_eq(t.rest_cap_per_chapter, 3, "镖局休整限 3/章（T10f 调平：2→3）")
 	assert_eq(t.credit_service_cost, 8, "镖局服务单价 ~8")
 	assert_eq(t.credit_income_chapter1, 25, "章 1 信用产出 ~25")

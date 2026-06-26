@@ -43,8 +43,8 @@ func test_on_rest_heals_and_updates_button():
 	assert_eq(MetaSession.current_run.rest_used, 1, "rest_used+1")
 	# 满血后 _can_rest false → 按钮 disabled
 	assert_true(hub._btn_rest.disabled, "满血后按钮 disabled")
-	# 按钮文案反映剩余次数（cap=2，已用1 → 剩 1）
-	assert_true(hub._btn_rest.text.find("剩余 1/2") >= 0, "按钮文案显示剩余 1/2")
+	# 按钮文案反映剩余次数（cap=3，已用1 → 剩 2）
+	assert_true(hub._btn_rest.text.find("剩余 2/3") >= 0, "按钮文案显示剩余 2/3")
 	remove_child(hub)
 	hub.queue_free()
 
@@ -64,7 +64,7 @@ func test_can_rest_false_when_cap_used():
 	var hub := preload("res://src/scenes/hub/hub.tscn").instantiate()
 	add_child(hub)
 	var run := _injured_run()
-	run.rest_used = 2   # cap=2 已用满
+	run.rest_used = 3   # cap=3 已用满（T10f 调平）
 	MetaSession.current_run = run
 	hub._refresh_status()
 	assert_false(hub._can_rest(), "配额用满 → 不可休整")

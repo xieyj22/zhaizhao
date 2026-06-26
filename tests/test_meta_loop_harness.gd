@@ -230,11 +230,11 @@ func test_maybe_rest_heals_when_cap_available():
 
 func test_maybe_rest_noop_when_cap_used():
 	# rest_used==cap → 不回血、不增 rest_used
-	var run := _rest_test_run(8, 20, 2)   # cap=2 已用满
+	var run := _rest_test_run(8, 20, 3)   # cap=3 已用满（T10f 调平）
 	var tuning := Tuning.new()
 	MetaLoopHarness._maybe_rest(run, tuning)
 	assert_eq(int(run.player_roster[0]["hp"]), 8, "配额用满 → 不回血")
-	assert_eq(run.rest_used, 2, "rest_used 不增")
+	assert_eq(run.rest_used, 3, "rest_used 不增")
 
 func test_maybe_rest_noop_when_full_hp():
 	# 满血 → 不消耗配额（无需休整）

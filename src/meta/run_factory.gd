@@ -53,7 +53,7 @@ static func apply_init_hooks(run: RunState, meta: MetaState) -> void:
 ## 主角 unit_persist_dict（T4 §6.2）。kit_ids = 全部 T1 解锁招（五势圆融）。
 static func _protagonist(t1_ids: Array) -> Dictionary:
 	return {
-		"id": "protagonist", "team": 0, "hp": 20, "max_hp": 20,
+		"id": "protagonist", "team": 0, "hp": 34, "max_hp": 34,
 		"opening": 0, "max_opening": 6,
 		"stance": Stance.Id.METAL, "grid_pos": [1, 3], "facing": 0,
 		"guard_broken": false, "alive": true,
@@ -67,7 +67,7 @@ static func _protagonist(t1_ids: Array) -> Dictionary:
 static func _ally(faction_id: String, roster_index: int) -> Dictionary:
 	return {
 		"id": "ally_%s_%d" % [faction_id, roster_index],
-		"team": 0, "hp": 18, "max_hp": 18,
+		"team": 0, "hp": 26, "max_hp": 26,
 		"opening": 0, "max_opening": 6,
 		"stance": FactionData.stance_for(faction_id),
 		"grid_pos": (FactionData.PLAYER_SLOTS[roster_index] as Array).duplicate(),

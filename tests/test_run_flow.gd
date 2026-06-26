@@ -202,11 +202,11 @@ func test_rest_heals_roster_and_increments_used():
 
 func test_rest_noop_when_cap_reached():
 	# rest_used==cap → 返回 false、hp 不变、rest_used 仍 cap
-	var run := _rest_run(10, 20, 2)   # cap=2 已用满
+	var run := _rest_run(10, 20, 3)   # cap=3 已用满（T10f 调平）
 	var healed: bool = RunFlow.rest(run, Tuning.new())
 	assert_false(healed, "配额用满 → 未休整（false）")
 	assert_eq(int(run.player_roster[0]["hp"]), 10, "配额满不回血")
-	assert_eq(run.rest_used, 2, "rest_used 不增")
+	assert_eq(run.rest_used, 3, "rest_used 不增")
 
 func test_rest_noop_when_full_hp():
 	# 满血 → 不消耗配额（无需休整），返回 false
