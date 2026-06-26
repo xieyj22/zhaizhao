@@ -161,6 +161,9 @@ static func survive_loss(run: RunState) -> void:
 			run.player_roster[i] = pd
 			break
 	cull_dead_allies(run)
+	# 残息退回章首：清 current_node_id，下次进 map 由 place_at_chapter_start 重定位 L0，
+	# 玩家可换条路绕过战败节点（此前卡在战败节点只能沿其 DAG 后继走，换不了路）。
+	run.current_node_id = ""
 
 ## 进入章节图：若 current_node_id 为空（在 hub），定位到当前章 L0 起点节点。
 ## 幂等——已在某节点时（如战斗后返回 map）不动。map 场景 _ready 调用。

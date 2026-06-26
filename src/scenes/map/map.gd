@@ -40,11 +40,11 @@ func _build_ui() -> void:
 			var visited := RunFlow.is_visited(run, id)
 			if visited and id != run.current_node_id:
 				btn.text += " ✓"   # 已通关可回放
-			# 可点：DAG 前进可达，或已通关（回放）。当前节点无自环、不可重复进。
+			# 可点：DAG 前进可达，或已通关（回放）。当前节点无自环、不可点自己→disabled。
 			if RunFlow.can_advance_node(run, id) or (visited and id != run.current_node_id):
 				btn.pressed.connect(_on_enter_node.bind(id))
 			else:
-				btn.disabled = (id != run.current_node_id)
+				btn.disabled = true   # 含当前节点（★ 无自环，点了没反应→灰掉免困惑）
 			_layer.add_child(btn)
 	var back := Button.new(); back.position = Vector2(40, 520); back.text = "返回大本营"
 	back.pressed.connect(func(): get_tree().change_scene_to_file("res://src/scenes/hub/hub.tscn"))

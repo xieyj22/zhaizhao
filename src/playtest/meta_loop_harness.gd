@@ -214,6 +214,7 @@ static func _fight_battle(run: RunState, node_type: String, node_id: String,
 	# option B 软失败镜像：普通节点败北 → 主角残息续跑（boss 败仍由下轮 is_run_over 判死→protagonist_dead）
 	if oc == BattleState.Outcome.TEAM1_WIN and node_type != "boss":
 		RunFlow.survive_loss(run)
+		RunFlow.place_at_chapter_start(run)   # 镜像真实 map._ready：survive_loss 清了 current_node_id，重定位 L0 续跑
 	if node_type == "boss":
 		match oc:
 			BattleState.Outcome.TEAM0_WIN:

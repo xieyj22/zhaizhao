@@ -243,6 +243,7 @@ func _dead_roster() -> Array:
 func test_survive_loss_revives_protagonist_and_culls_dead_allies():
 	var run := RunState.new()
 	run.player_roster = _dead_roster()
+	run.current_node_id = "n1_1"   # 模拟在战败的 hazard 节点
 	RunFlow.survive_loss(run)
 	var prot: Dictionary = {}
 	for pd in run.player_roster:
@@ -254,6 +255,7 @@ func test_survive_loss_revives_protagonist_and_culls_dead_allies():
 	assert_eq(int(prot.get("opening", 99)), 0, "破绽清零")
 	assert_eq(run.player_roster.size(), 2, "死亡 ally 剔除（主角 + 存活 ally）")
 	assert_false(RunFlow.is_run_over(run), "主角活 → 局未结束（可继续闯）")
+	assert_eq(run.current_node_id, "", "survive_loss 退回章首（清 current_node_id，可换路绕过战败节点）")
 
 # —— 已通关节点可回放（玩家验收：想重玩之前的节点）——
 
