@@ -14,20 +14,22 @@ func test_run_one_terminates_with_valid_outcome():
 	assert_true(res.battles_fought >= 0, "战斗场次非负")
 
 func test_run_one_advances_past_chapter1():
-	# 4 章闭环（逻辑验证）：多 seed 跑，至少一局推进到章 2+（验 advance_chapter 续跑接通）。
-	# 注：到不了章 4 是平衡问题（玩家方当前偏弱），非代码 bug——本测只验 advance 续跑机制本身。
-	# 实测 15 seed brain 通常有 8-12 局到章 2，故 max_ch>=2 是稳健的逻辑断言。
+	# 4 章闭环（逻辑验证）：多 seed 跑，至少一局推进到章 3+（验 advance_chapter 续跑多章接通）。
+	# T10b 修复（harness 休整 + 敌人 hp bug）后，brain 15 seed（100..198）实测 max_ch=4，
+	# 有局到 ch3/ch4——故 max_ch>=3 是反映真实推进的稳健断言（此前 T9 因 harness 失真仅断 >=2）。
 	var meta := MetaState.new_first_play()
 	var max_ch := 1
 	for s in 15:
 		var r := MetaLoopHarness.run_one(meta, 100 + s * 7, AIPersonality.brain())
 		max_ch = maxi(max_ch, r.chapter_reached)
-	assert_gte(max_ch, 2, "存在 advance 到章 2 的局（验 advance_chapter 续跑机制）")
+	assert_gte(max_ch, 3, "存在 advance 到章 3 的局（验 advance_chapter 多章续跑机制）")
 
 func test_chapter2_boss_encounter_distribution():
-	# 章 2 双 boss 选其一（逻辑验证）：多性格 × 宽 seed 扫，莫青娘/晏九都被遇过。
+	# 章 2 双 boss 选其一（逻辑验证）：多性格 × seed 扫，莫青娘/晏九都被遇过。
 	# 验两件事：① 节点真实 boss_id 被读（非固定 EnemyPool.CHAPTER_BOSS_ID[2]）；
-	#          ② bosses_met 记录遭遇。宽扫对冲平衡（玩家方偏弱，单 20 seed 可能全死在 ch2 boss 前）。
+	#          ② bosses_met 记录遭遇。
+	# T10b 修复（harness 休整 + 敌人 hp bug）后玩家在 ch2 存活更久，无需宽扫即可撞到双 boss：
+	# 3 性格 × 10 seed=30 run 足够（此前 T9 因 harness 失真用 3×80=240 宽扫对冲耗死）。
 	var meta := MetaState.new_first_play()
 	var met := {"moqingniang":0, "yanjiu":0}
 	for pers_name in ["brain", "brute", "trick"]:
@@ -36,7 +38,7 @@ func test_chapter2_boss_encounter_distribution():
 			pers = AIPersonality.brute()
 		elif pers_name == "trick":
 			pers = AIPersonality.trick()
-		for s in 80:
+		for s in 10:
 			var r := MetaLoopHarness.run_one(meta, 1000 + s * 17, pers)
 			for b in r.bosses_met:
 				if met.has(b):
@@ -173,3 +175,34 @@ func test_maybe_rest_noop_when_full_hp():
 	MetaLoopHarness._maybe_rest(run, tuning)
 	assert_eq(int(run.player_roster[0]["hp"]), 20, "满血 → 保持满血")
 	assert_eq(run.rest_used, 0, "满血 → 不消耗配额")
+
+# ---- T10b Part C: 30 seed 平衡分布快照（brain 性格，满血休整模型）----
+# 打印 chapter_reached 直方图 + outcome 分布 + 各章 boss 遭遇频次。
+# 软断言：通关率/死亡率非 0% 非 100%（排除\"harness 失真\"伪数据）。数据本身据实记录。
+func test_balance_distribution_snapshot():
+	var meta := MetaState.new_first_play()
+	var pers := AIPersonality.brain()
+	const N := 30
+	# chapter_reached 直方图（1..4）；outcome 计数；boss 遭遇频次
+	var ch_hist := {1:0, 2:0, 3:0, 4:0}
+	var outcome_count := {"cleared":0, "protagonist_dead":0, "boss_draw":0, "stalled":0}
+	var boss_met := {}
+	var boss_defeated_count := {}
+	for s in N:
+		var r := MetaLoopHarness.run_one(meta, 500 + s * 13, pers)
+		var ch: int = clampi(r.chapter_reached, 1, 4)
+		ch_hist[ch] += 1
+		outcome_count[r.outcome] = outcome_count.get(r.outcome, 0) + 1
+		for b in r.bosses_met:
+			boss_met[b] = boss_met.get(b, 0) + 1
+	# 打印分布（诊断/报告用）
+	gut.p("=== T10b 30-seed 平衡快照（brain，满血休整×2/章）===")
+	gut.p("chapter_reached 直方图: ch1=%d ch2=%d ch3=%d ch4=%d" % [ch_hist[1], ch_hist[2], ch_hist[3], ch_hist[4]])
+	gut.p("outcome 分布: cleared=%d protagonist_dead=%d boss_draw=%d stalled=%d" % [outcome_count["cleared"], outcome_count["protagonist_dead"], outcome_count["boss_draw"], outcome_count["stalled"]])
+	gut.p("boss 遭遇频次: %s" % str(boss_met))
+	var cleared: int = outcome_count["cleared"]
+	var dead: int = outcome_count["protagonist_dead"]
+	# 软断言：通关率非 0% 非 100%（排除失真）；死亡率非 100%（排除 harness 永远耗死）
+	assert_true(cleared > 0, "通关率非 0%%（%d/%d）" % [cleared, N])
+	assert_true(cleared < N, "通关率非 100%%（%d/%d）" % [cleared, N])
+	assert_true(dead < N, "死亡率非 100%%（%d/%d）" % [dead, N])
