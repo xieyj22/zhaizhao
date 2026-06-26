@@ -48,13 +48,13 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 			return res
 		# 章末 boss 已败 → 推进或通关
 		if RunFlow.can_advance_chapter(run):
-			if run.current_chapter >= 4:   # 章 4 掌门 yanwujiu 胜 = 通关
+			var prog_outcome: String = _progress_after_boss(run)
+			if prog_outcome == "cleared":
+				# 章 4 掌门 yanwujiu 胜 = 通关（_progress_after_boss 已判定，未调 advance 防溢出）
 				res.outcome = "cleared"
 				res.chapter_reached = run.current_chapter
 				return res
-			# 章 1-3 boss 胜 → 推进下一章，续跑
-			RunFlow.advance_chapter(run)
-			RunFlow.place_at_chapter_start(run)   # advance 置 current_node_id=""，需重定位 L0
+			# prog_outcome == ""：章 1-3 boss 胜已 advance+place，续跑下一章
 			continue   # 回 loop 顶处理新章（is_run_over/can_advance/选节点）
 		# 取下一可达节点（DAG 邻接）；无邻接且未通关 → stalled
 		var m: Dictionary = run.chapter_maps[run.current_chapter]
@@ -78,6 +78,20 @@ static func run_one(meta: MetaState, seed: int, player_personality: AIPersonalit
 	res.outcome = "stalled"
 	res.chapter_reached = run.current_chapter
 	return res
+
+## boss 胜后的章节推进决策（run_one 内 can_advance_chapter 为 true 时调）。
+## 返回 "cleared"（ch4 掌门 yanwujiu 胜=通关，调用方设 RunResult 并 return）或 ""（推进到下一章或仍在当章，循环继续）。
+## ch4 不调 advance_chapter（防 current_chapter 溢出到 5 致 generate_map(5) 炸）。
+## 抽成纯函数：让合成 run 状态可直接驱动该决策（绕开平衡做 ch4 cleared 路径的单测覆盖）。
+static func _progress_after_boss(run: RunState) -> String:
+	if not RunFlow.can_advance_chapter(run):
+		return ""
+	if run.current_chapter >= 4:   # 章 4 掌门 yanwujiu 胜 = 通关
+		return "cleared"
+	# 章 1-3 boss 胜 → 推进下一章
+	RunFlow.advance_chapter(run)
+	RunFlow.place_at_chapter_start(run)   # advance 置 current_node_id=""，需重定位 L0
+	return ""
 
 ## 开局限招募：模拟玩家在 hub 招满可招派系（受 roster_cap 限），让整局含多队友。
 static func _auto_recruit(run: RunState) -> void:

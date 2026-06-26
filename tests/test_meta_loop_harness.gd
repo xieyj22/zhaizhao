@@ -95,3 +95,41 @@ func test_run_one_protagonist_death_possible():
 	# saw_death 不强求（取决于平衡），仅文档化：若主角死则 outcome 正确
 	if saw_death:
 		pass_test("检测到 protagonist_dead 局，permadeath 判定已接进闭环")
+
+# ---- ch4 通关分支合成测试（M4a T9 review fix）----
+# 当前平衡下玩家 100% 死亡、活不到章 4，故 run_one 集成路径覆盖不到 ch4 cleared 分支。
+# 这里直接驱动纯函数 _progress_after_boss：用合成 run 状态绕开平衡，专门验通关决策逻辑。
+# 关键不变量：ch4 yanwujiu 胜 → cleared，且 current_chapter 不溢出到 5（否则 generate_map(5) 会炸）。
+
+func _make_synthetic_run(chapter: int, bosses_defeated: Array) -> RunState:
+	# 用 init_run 拿到合法章1 run（roster/modifier/seed 全齐），再手动调成目标章状态。
+	# 注意：不调 generate_map(chapter)——_progress_after_boss 在 ch4 分支只读 current_chapter，
+	#       ch1-3 分支才 advance（advance 内部会 generate_map(next_chapter)）。
+	var meta := MetaState.new_first_play()
+	var run := RunFactory.init_run(meta, 7)
+	run.current_chapter = chapter
+	run.chapter_progress[chapter] = {"bosses_defeated": bosses_defeated.duplicate(), "nodes_visited": []}
+	return run
+
+func test_progress_after_boss_ch4_cleared():
+	# ch4 + yanwujiu 已败 → cleared，current_chapter 保持 4（不推进到 5），无 chapter_maps[5]
+	var run := _make_synthetic_run(4, ["yanwujiu"])
+	var outcome: String = MetaLoopHarness._progress_after_boss(run)
+	assert_eq(outcome, "cleared", "ch4 yanwujiu 胜 → cleared")
+	assert_eq(run.current_chapter, 4, "ch4 cleared 后 current_chapter 不溢出到 5")
+	assert_false(run.chapter_maps.has(5), "未触发 generate_map(5)（防炸的关键不变量）")
+
+func test_progress_after_boss_ch3_advances():
+	# ch3 + 宗政烈已败 → ""（推进续跑），current_chapter=4，chapter_maps[4] 被生成
+	var run := _make_synthetic_run(3, ["zongzhenglie"])
+	var outcome: String = MetaLoopHarness._progress_after_boss(run)
+	assert_eq(outcome, "", "ch3 boss 胜 → 非通关，循环继续")
+	assert_eq(run.current_chapter, 4, "advance 后 current_chapter==4")
+	assert_true(run.chapter_maps.has(4), "advance 生成了章 4 图")
+
+func test_progress_after_boss_no_clear_until_boss_defeated():
+	# ch4 但 yanwujiu 未败 → ""（继续当章）——掌门未死不算通关
+	var run := _make_synthetic_run(4, [])
+	var outcome: String = MetaLoopHarness._progress_after_boss(run)
+	assert_eq(outcome, "", "ch4 yanwujiu 未败 → 不通关，继续当章")
+	assert_eq(run.current_chapter, 4, "未推进，仍在章 4")
