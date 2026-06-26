@@ -49,7 +49,10 @@ static func _unit_from_enemy(ed: Dictionary) -> UnitState:
 	var gp: Array = ed.get("grid_pos",[5,3])
 	u.grid_pos = Vector2i(gp[0], gp[1])
 	u.stance = ed.get("stance", Stance.Id.METAL)
-	u.hp = 20; u.max_hp = 20
+	# 读 pool 敌人 hp（T10b：修固定 20 bug——pool 敌人有 hp 字段 16-34/40/48/50/65，此前被压平成 20）
+	var hp := int(ed.get("hp", 20))
+	u.hp = hp
+	u.max_hp = hp
 	u.kit = _build_kit(ed.get("kit",[]), RunState.new())   # 敌方无 variant（run 空）
 	return u
 

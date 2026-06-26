@@ -167,3 +167,24 @@ func test_no_boss_id_fallback_no_trait():
 	# 边界守护：node_cfg 无 boss_id → 不触发 boss 逻辑，boss_traits 空（与 M0-M3 一致）
 	var s := BattleBuilder.build(_boss_run(1), {"enemies":[]})
 	assert_eq(s.boss_traits, {}, "无 boss_id → boss_traits 空")
+
+# —— T10b Part A: _unit_from_enemy 读 pool 敌人 hp（修固定 20 bug）——
+
+func test_enemy_unit_hp_read_from_pool_dict():
+	# 敌人 ed 带 hp=26 → built unit.max_hp==26（验 builder 用了 pool 的 hp，非固定 20）
+	var node_cfg: Dictionary = {"enemies":[
+		{"id":"e1","faction":"F2","personality":"brute","grid_pos":[5,3],"stance":0,"hp":26,"kit":["chifeng_lianci","chifeng_yajin"]}
+	]}
+	var s := BattleBuilder.build(_run(), node_cfg)
+	var e: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(e.max_hp, 26, "_unit_from_enemy 读 ed.hp（非固定 20）")
+	assert_eq(e.hp, 26, "enemy hp=max_hp（满血开场）")
+
+func test_enemy_unit_hp_default_20_when_missing():
+	# ed 无 hp 字段 → 兜底 20（向后兼容旧测试/边界）
+	var node_cfg: Dictionary = {"enemies":[
+		{"id":"e1","faction":"F2","grid_pos":[5,3],"stance":0,"kit":["chifeng_lianci"]}
+	]}
+	var s := BattleBuilder.build(_run(), node_cfg)
+	var e: UnitState = s.units.filter(func(u): return u.team == 1)[0]
+	assert_eq(e.max_hp, 20, "ed 无 hp → 兜底 20")
