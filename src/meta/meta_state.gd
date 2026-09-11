@@ -59,14 +59,16 @@ static func commit_run_to_meta(meta: MetaState, run: RunState, run_won: bool) ->
 	if run_won:
 		m.meta_runs_completed += 1
 		m.meta_inheritance_unlocked = true
-	# —— Wave2 codex 收割：全章 boss 击杀 + 到章（局末调用即全量，中局胜利数据活到局末）——
+	# —— Wave2 codex 收割：全章 boss 击杀 + 到章区间（局末调用即全量，中局胜利数据活到局末）——
 	for ch: Variant in run.chapter_progress:
 		var cp: Dictionary = run.chapter_progress[ch]
 		for bid: Variant in cp.get("bosses_defeated", []):
 			if not m.bosses_defeated_all.has(bid):
 				m.bosses_defeated_all.append(bid)
-	if not m.chapters_reached.has(run.current_chapter):
-		m.chapters_reached.append(run.current_chapter)
+	# 到过即记：死于章 N 必然途经 1..N-1，山河志"到过该章"解锁语义要求全记（fix round 1 裁决）
+	for ch: int in range(1, run.current_chapter + 1):
+		if not m.chapters_reached.has(ch):
+			m.chapters_reached.append(ch)
 	return m
 
 static func load_from(path: String = DEFAULT_SAVE_PATH) -> MetaState:

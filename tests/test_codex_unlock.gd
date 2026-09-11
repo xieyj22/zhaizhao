@@ -31,6 +31,9 @@ func test_commit_harvests_bosses_and_chapters():
 	var meta := MetaState.commit_run_to_meta(_meta(), run, false)
 	assert_has(meta.bosses_defeated_all, "hailianzheng")
 	assert_has(meta.bosses_defeated_all, "moqingniang")
+	# 区间收割：死于章 3 必然途经 1/2，到过即记（fix round 1 裁决）
+	assert_has(meta.chapters_reached, 1)
+	assert_has(meta.chapters_reached, 2)
 	assert_has(meta.chapters_reached, 3)
 	# 二次收割去重
 	var meta2 := MetaState.commit_run_to_meta(meta, run, false)
@@ -55,6 +58,8 @@ func test_unlock_types():
 	assert_true(CodexUnlock.is_unlocked(e_tech, m))
 	m.meta_runs_completed = 1
 	assert_true(CodexUnlock.is_unlocked(e_runs, m))
+	# 未知 unlock type → fallback false（review Minor#2）
+	assert_false(CodexUnlock.is_unlocked({"unlock": {"type": "nonsense", "key": ""}}, m))
 
 func test_codex_count_ge_two_pass_no_recursion_trap():
 	# codex_count_ge 以「非 count 型已解锁条目数」计数（两遍求值，防递归自含）。
@@ -88,3 +93,5 @@ func test_hint_for_templates():
 	assert_eq(CodexUnlock.hint_for({"unlock": {"type": "runs_completed_ge", "key": 1}}), "通关后解锁")
 	assert_eq(CodexUnlock.hint_for({"unlock": {"type": "codex_count_ge", "key": 2}}), "江湖志收集更多条目后解锁")
 	assert_eq(CodexUnlock.hint_for({"unlock": {"type": "always", "key": ""}}), "")
+	# 未知 unlock type → fallback 空串（review Minor#2）
+	assert_eq(CodexUnlock.hint_for({"unlock": {"type": "nonsense", "key": ""}}), "")
