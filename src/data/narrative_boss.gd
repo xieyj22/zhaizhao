@@ -1,0 +1,45 @@
+class_name NarrativeBoss
+extends RefCounted
+
+## boss 叙事（Wave2 spec §2.1）。正文真源=docs/design/narrative/drafts/（W2-0/W2-2 定稿灌入）。
+const BOSS_NARRATIVE := {
+	"zongzhenglie": {
+		"bio": "赤锋关外三百里，有崖名裂碑。宗政烈生在崖下碑匠家，十四岁那年凿完第一块碑，没歇，就地打了一趟拳，把崖脚一块卧牛石打裂了。他爹说这不是碑匠的手，他听了，下山投军，又从军里出来，投了血衣教。有人问他图什么，他说：图个痛快。外堂的活计不体面——围山、断路、处理活口，教里体面人不愿沾手的，都归他。灭门那夜他守在山下，一夜没进山，也没放一个人出山。教主讲道统，讲五势尊卑，他听不太懂，只记住了一条：挡路的，砸开就是。四十年横练，周身硬得没一处门户，江湖人说他不讲道理，他说：碑是死的，道理也是。他这个人，倒还活着。",
+		"pre": [
+			{"s": "宗政烈", "line": "镜照门的种，倒敢往沉剑谷里走。"},
+			{"s": "遗照", "line": "血衣教外堂堂主，守在这种死地，不觉得屈么。"},
+			{"s": "宗政烈", "line": "屈？老夫凿了半辈子碑，才明白世上最痛快的事，是把硬东西砸开。"},
+			{"s": "遗照", "line": "我师的门，也是你们砸的。"},
+			{"s": "宗政烈", "line": "山上的事归右护法。老夫只管山下，围山那夜，没人进，也没人出。"},
+			{"s": "遗照", "line": "那夜，井里有一个。"},
+			{"s": "宗政烈", "line": "所以教里补了一道令。见你，就地埋了。"},
+			{"s": "宗政烈", "line": "你的心眼再亮，也得有门户可读。老夫横练四十年，周身没有门户。"},
+			{"s": "遗照", "line": "碑再硬，也是死的。我是活的。"},
+			{"s": "宗政烈", "line": "好。老夫倒要看看，活人怎么裂碑。"},
+		],
+		"post_win": [
+			{"s": "宗政烈", "line": "裂了。老夫这一身碑，到底裂了。"},
+			{"s": "遗照", "line": "你早知道有还账的这一天么。"},
+			{"s": "宗政烈", "line": "入教那天就知道。血衣换酒喝，账总是要还的。"},
+			{"s": "宗政烈", "line": "小子，记一句。教主手里那半卷书，比你师的命还金贵，他为那书什么都能舍。"},
+			{"s": "宗政烈", "line": "走罢。趁着老夫的碑还没凉。"},
+		],
+		"post_loss": [
+			{"s": "宗政烈", "line": "就这点斤两。"},
+			{"s": "宗政烈", "line": "读招的种子，还没发芽，就折了。"},
+			{"s": "宗政烈", "line": "明镜先生教出来的，也就这样。"},
+			{"s": "宗政烈", "line": "教里说磨成粉。老夫破例，留你个全尸，扔进剑谷，喂那些锈铁罢。"},
+		],
+		"trait_lines": {},   # iron_body 被动无台词；frenzy_on/drain_on/read_hit 按需（批B/C 灌入）
+	},
+}
+
+static func entry(boss_id: String) -> Dictionary:
+	return BOSS_NARRATIVE.get(boss_id, {})
+
+static func dialogue(boss_id: String, key: String) -> Array:
+	return entry(boss_id).get(key, [])
+
+static func line(boss_id: String, trigger: String) -> String:
+	var tl: Dictionary = entry(boss_id).get("trait_lines", {})
+	return String(tl.get(trigger, ""))
