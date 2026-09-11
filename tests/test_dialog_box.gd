@@ -49,3 +49,23 @@ func test_interlude_mode_no_name():
 	var box := _make_box()
 	box.open([{"s": "", "line": "过场散文一句"}], "", func(): pass)
 	assert_eq(box.current_name(), "")
+
+func test_fallback_name_used_when_s_empty():
+	var box := _make_box()
+	box.open([{"s": "", "line": "旁白一句"}], "旁白", func(): pass)
+	assert_eq(box.current_name(), "旁白", "条目 s 为空时回退 open 的 name_label 默认名条")
+
+func test_unhandled_input_space_advances_echo_ignored():
+	var box := _make_box()
+	box.open(LINES, "test", func(): pass)
+	var ev := InputEventKey.new()
+	ev.pressed = true
+	ev.keycode = KEY_SPACE
+	box._unhandled_input(ev)
+	assert_eq(box.current_index(), 1, "空格推进一句")
+	var echo_ev := InputEventKey.new()
+	echo_ev.pressed = true
+	echo_ev.echo = true
+	echo_ev.keycode = KEY_SPACE
+	box._unhandled_input(echo_ev)
+	assert_eq(box.current_index(), 1, "按住空格的系统 echo 重复键不推进")

@@ -52,8 +52,9 @@ func _on_panel_input(ev: InputEvent) -> void:
 func _unhandled_input(ev: InputEvent) -> void:
 	if not visible or _finished:
 		return
-	if ev is InputEventKey and ev.pressed and (ev.keycode == KEY_SPACE or ev.keycode == KEY_ENTER):
+	if ev is InputEventKey and ev.pressed and not ev.echo and (ev.keycode == KEY_SPACE or ev.keycode == KEY_ENTER):
 		_advance()
+		get_viewport().set_input_as_handled()
 
 func open(lines: Array, name_label: String, on_finished: Callable) -> void:
 	_lines = lines
@@ -70,10 +71,13 @@ func open(lines: Array, name_label: String, on_finished: Callable) -> void:
 		_panel.modulate.a = 0.0
 		var tw := create_tween()
 		tw.tween_property(_panel, "modulate:a", 1.0, 0.18)
+	else:
+		_panel.modulate.a = 1.0   # 兜底：淡入中 skip 后 reduce_motion 切换，防止半透明面板
 
 func _show_idx() -> void:
 	var d: Dictionary = _lines[_idx]
-	_name_lbl.text = String(d.get("s", "")) if String(d.get("s", "")) != "" else _name_for_box()
+	var s_name := String(d.get("s", ""))
+	_name_lbl.text = s_name if s_name != "" else _name_for_box()
 	_body_lbl.text = String(d.get("line", ""))
 	_hint_lbl.text = "▸ 继续（%d/%d）" % [_idx + 1, _lines.size()]
 
