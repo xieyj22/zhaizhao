@@ -7,6 +7,8 @@ var meta_faction_relations: Dictionary = {} # 跨 run 关系
 var meta_inheritance_unlocked: bool = false
 var meta_runs_completed: int = 0
 var meta_codex_entries: Array = []          # M3 占位
+var bosses_defeated_all: Array = []        # Wave2 codex：跨 run 击败 boss 累积（String id 去重）
+var chapters_reached: Array = []           # Wave2 codex：到过的章号累积
 
 const DEFAULT_SAVE_PATH := "user://meta.sav"
 
@@ -27,6 +29,8 @@ func to_dict() -> Dictionary:
 		"meta_inheritance_unlocked": meta_inheritance_unlocked,
 		"meta_runs_completed": meta_runs_completed,
 		"meta_codex_entries": meta_codex_entries,
+		"bosses_defeated_all": bosses_defeated_all,
+		"chapters_reached": chapters_reached,
 	}
 
 ## 注意：深拷贝 nested 容器——to_dict() 返回的 Array/Dict 与本对象字段同引用，
@@ -38,6 +42,8 @@ static func from_dict(d: Dictionary) -> MetaState:
 	m.meta_inheritance_unlocked = d.get("meta_inheritance_unlocked", false)
 	m.meta_runs_completed = d.get("meta_runs_completed", 0)
 	m.meta_codex_entries = (d.get("meta_codex_entries", []) as Array).duplicate(true)
+	m.bosses_defeated_all = (d.get("bosses_defeated_all", []) as Array).duplicate(true)
+	m.chapters_reached = (d.get("chapters_reached", []) as Array).duplicate(true)
 	return m
 
 ## run 结束沉淀（纯函数，深拷贝；不落盘）。run_won=是否通关（章末 boss 胜）。
@@ -53,6 +59,14 @@ static func commit_run_to_meta(meta: MetaState, run: RunState, run_won: bool) ->
 	if run_won:
 		m.meta_runs_completed += 1
 		m.meta_inheritance_unlocked = true
+	# —— Wave2 codex 收割：全章 boss 击杀 + 到章（局末调用即全量，中局胜利数据活到局末）——
+	for ch: Variant in run.chapter_progress:
+		var cp: Dictionary = run.chapter_progress[ch]
+		for bid: Variant in cp.get("bosses_defeated", []):
+			if not m.bosses_defeated_all.has(bid):
+				m.bosses_defeated_all.append(bid)
+	if not m.chapters_reached.has(run.current_chapter):
+		m.chapters_reached.append(run.current_chapter)
 	return m
 
 static func load_from(path: String = DEFAULT_SAVE_PATH) -> MetaState:
