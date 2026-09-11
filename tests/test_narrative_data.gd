@@ -44,4 +44,6 @@ func test_codex_entries_schema():
 
 func test_db_facade_forwards():
 	assert_eq(NarrativeDB.boss_dialogue("zongzhenglie", "pre"), NarrativeBoss.dialogue("zongzhenglie", "pre"))
+	assert_eq(NarrativeDB.boss_line("zongzhenglie", "frenzy_on"), NarrativeBoss.line("zongzhenglie", "frenzy_on"))
+	assert_eq(NarrativeDB.prose("chenjianggu"), NarrativeRegion.prose("chenjianggu"))
 	assert_eq(NarrativeDB.interlude(9, "open"), "")
