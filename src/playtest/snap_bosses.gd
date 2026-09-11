@@ -65,7 +65,7 @@ func _snap_one(bid: String, meta: MetaState, root: Window, meta_session: Node) -
 	# 设 run 当前章 = boss 所在章（影响 BB 难度曲线 + EnemyPool 兜底）
 	run.current_chapter = int(cfg.get("chapter", 1))
 	meta_session.set("current_run", run)
-	meta_session.set("current_node_cfg", {"boss_id": bid, "node_type": "boss"})
+	meta_session.set("current_node_cfg", {"boss_id": bid, "node_type": "boss", "replay": true})   # replay：跳过战前对白，截战斗布局本体（Wave2）
 	var battle: Node2D = null
 	var img: Image = null
 	# —— instantiate + 等帧渲染 ——

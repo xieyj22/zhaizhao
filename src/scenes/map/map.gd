@@ -80,11 +80,16 @@ func _on_enter_node(node_id: String) -> void:
 	var run := MetaSession.current_run
 	# 快照进战前位置——撤退（本场不算）时回到此，玩家可换打别的节点（玩家验收）
 	MetaSession.previous_node_id = run.current_node_id
+	# Wave2：回放标记须在 enter_node 前快照——enter_node 会立刻记 visited，
+	# 先查后进会把所有战斗误标 replay（战前对白永不弹）。
+	var was_visited := RunFlow.is_visited(run, node_id)
 	RunFlow.enter_node(run, node_id)
 	var ty: String = run.chapter_maps[run.current_chapter]["nodes"][node_id]["type"]
 	match ty:
 		"boss","duel","sparring","hazard":
 			MetaSession.current_node_cfg = _node_cfg_for(ty, node_id)
+			if was_visited:
+				MetaSession.current_node_cfg["replay"] = true   # Wave2：回放战跳过对白
 			get_tree().change_scene_to_file("res://src/scenes/battle/battle.tscn")
 		"visit","escort":
 			# —— T10 招募经济：访问/护送节点挣信用（招募同袍的材料）——

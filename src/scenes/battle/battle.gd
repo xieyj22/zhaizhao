@@ -14,6 +14,8 @@ var last_read_events: Array = []
 var pending: Dictionary = {}            # unit.id(String) -> Resolver.Action（玩家已下指令）
 var awaiting_target: Dictionary = {}    # unit.id(String) -> Technique（选招了打击，等点目标）
 var game_over: bool = false             # 战斗结束锁：outcome 非 ONGOING 后阻止继续揭晓/选招
+var dialog_open: bool = false           # Wave2：对白打开中（输入 gate，与 game_over 同模式）
+var _trait_line_shown: Dictionary = {}  # Wave2：trait 台词触发点→已显示（每触发点本场一次）
 
 var _layer: CanvasLayer
 var _scroll: ScrollContainer
@@ -58,6 +60,12 @@ func _ready() -> void:
 
 	_build_ui()
 	_refresh()
+	# —— Wave2：战前对白（boss 非回放；空数据不弹）。不 await——不阻塞 _ready，
+	# dialog_open 由 DialogBox 回调（恰好一次）复位。
+	var pre_lines: Array = _dialog_lines_for(MetaSession.current_node_cfg, "pre")
+	if not pre_lines.is_empty():
+		dialog_open = true
+		_show_dialog(pre_lines, _boss_display_name())
 
 func _mk(id, team, pos, stance) -> UnitState:
 	var u := UnitState.new()
@@ -78,6 +86,25 @@ static func _personality_for(node_cfg: Dictionary) -> AIPersonality:
 		"trick": return AIPersonality.trick()
 		"brain_trick_hybrid": return AIPersonality.brain_trick_hybrid()
 		_: return AIPersonality.brain()
+
+## Wave2：对白门（boss 且非回放且数据非空）。纯函数可测。
+static func _dialog_lines_for(node_cfg: Dictionary, key: String) -> Array:
+	if not node_cfg.has("boss_id") or node_cfg.get("replay", false):
+		return []
+	return NarrativeBoss.dialogue(String(node_cfg["boss_id"]), key)
+
+## Wave2：trait 台词触发判定（纯函数，表现层 diff 的可测核）。
+## frenzy_on：本回合新翻狂暴；drain_on：hp 比回合前上升（吸血）；read_hit：读中玩家。
+static func _trait_line_key(bid: String, pre_frenzied: bool, pre_hp: int, u: UnitState, read_hit: bool) -> String:
+	if bid == "" or u == null or u.boss_id != bid:
+		return ""
+	if u.frenzied and not pre_frenzied:
+		return "frenzy_on"
+	if u.hp > pre_hp:
+		return "drain_on"
+	if read_hit:
+		return "read_hit"
+	return ""
 
 # ---------- UI ----------
 func _build_ui() -> void:
@@ -203,7 +230,7 @@ func _player_can_pick(u: UnitState, tech: Technique) -> bool:
 	return true
 
 func _on_pick_tech(u: UnitState, tech: Technique) -> void:
-	if game_over:
+	if game_over or dialog_open:
 		return
 	if tech.type == Technique.Type.STRIKE or tech.type == Technique.Type.FEINT:
 		awaiting_target[String(u.id)] = tech
@@ -214,15 +241,15 @@ func _on_pick_tech(u: UnitState, tech: Technique) -> void:
 	_refresh()
 
 func _on_pick_target(u: UnitState, tech: Technique, target_pos: Vector2i) -> void:
-	if game_over:
+	if game_over or dialog_open:
 		return
 	pending[String(u.id)] = Resolver.Action.new(u, tech, target_pos)
 	awaiting_target.erase(String(u.id))
 	_refresh()
 
 func _on_reveal() -> void:
-	if game_over:
-		return   # 战斗已结束，不再推进
+	if game_over or dialog_open:
+		return   # 战斗已结束/对白播放中，不再推进
 	# 玩家方所有存活单位都需已下指令
 	var alive_player := state.units.filter(func(u): return u.team == 0 and u.alive)
 	if pending.size() < alive_player.size():
@@ -241,12 +268,14 @@ func _on_reveal() -> void:
 	# 修复前：ai_out.predictions 只喂 compute_read_events（读招显示），从不转发 → mind_eye 死代码。
 	# ai_out 是 team1(boss/敌方) 的 choose_actions，predictions 键=玩家方 unit id，正是 mind_eye_counter 所需。
 	orch.ai_predictions = ai_out.predictions
-	# 记 pre hp/guard（juice：伤害飘字+震屏用，reveal 前）
+	# 记 pre hp/guard/frenzied（juice：伤害飘字+震屏用 + Wave2 trait 台词 diff，reveal 前）
 	var pre_hp: Dictionary = {}
 	var pre_guard: Dictionary = {}
+	var pre_frenzied: Dictionary = {}
 	for u in state.units:
 		pre_hp[String(u.id)] = u.hp
 		pre_guard[String(u.id)] = u.guard_broken
+		pre_frenzied[String(u.id)] = u.frenzied
 	orch.reveal_and_resolve(all_actions)
 	# juice：命中飘字（pre_guard=true=挨打前已崩溃→翻倍=critical=黄大字+震；致命=大震）
 	for u in state.units:
@@ -256,7 +285,21 @@ func _on_reveal() -> void:
 			view.flash_at(u.grid_pos)
 			if u.hp <= 0:
 				view.add_shake(8.0)
+	# 读招事件（原独立行上移至此——Wave2 trait 台词检测在 _on_reveal 内也要用）
 	last_read_events = TurnOrchestrator.compute_read_events(ai_out.predictions, all_actions)
+	# —— Wave2：trait 台词横幅（表现层 diff，逻辑层零改；每触发点本场一次）——
+	# 注意：_show_banner 调用处不 await（fire-and-forget）——若 await 会把 _on_reveal
+	# 变成每回合挂起的协程，破坏既有测试的同步断言时序。
+	var boss_bid: String = String(MetaSession.current_node_cfg.get("boss_id", "")) if MetaSession.current_run != null else ""
+	if boss_bid != "" and not _trait_line_shown.has("frenzy_on") and not _trait_line_shown.has("drain_on"):
+		for u: UnitState in state.units:
+			if u.team != 1:
+				continue
+			var key: String = _trait_line_key(boss_bid, bool(pre_frenzied.get(String(u.id), false)), int(pre_hp[String(u.id)]), u, _read_hit_boss(boss_bid))
+			if key != "" and not _trait_line_shown.has(key):
+				_trait_line_shown[key] = true
+				_show_banner(NarrativeBoss.line(boss_bid, key))
+				break
 	orch.end_turn()
 	_refresh()
 	var oc := state.outcome(tuning)
@@ -268,6 +311,18 @@ func _on_reveal() -> void:
 			_retreat_button.hide()   # 战斗结束后由"返回"按钮接管
 		var msg: String = ["", "玩家胜！", "玩家败...", "平局"][oc]
 		_hud.text = "战斗结束：%s（回合 %d）" % [msg, state.turn]
+		# —— Wave2：战后对白（boss 战限定；对白放回写前保戏剧节奏）——
+		# 协程安全：await 仅在 post 对白非空时到达——非 boss/回放路径全程同步
+		# （既有测试直调 _on_reveal() 后立即断言，时序不变）。
+		var post_key: String = ""
+		if MetaSession.current_node_cfg.has("boss_id") and not MetaSession.current_node_cfg.get("replay", false):
+			post_key = "post_win" if oc == BattleState.Outcome.TEAM0_WIN else ("post_loss" if oc == BattleState.Outcome.TEAM1_WIN else "")
+		if post_key != "":
+			var post_lines: Array = NarrativeBoss.dialogue(String(MetaSession.current_node_cfg["boss_id"]), post_key)
+			if not post_lines.is_empty():
+				dialog_open = true
+				_show_dialog(post_lines, _boss_display_name())
+				await _wait_dialog_done()
 		_write_back_result(oc)
 		var back := Button.new()
 		back.text = "主角阵亡 — 回大本营" if oc == BattleState.Outcome.TEAM1_WIN else "返回"
@@ -301,10 +356,64 @@ static func _find_unit(s: BattleState, id_str: String) -> UnitState:
 			return u
 	return null
 
+# ---------- Wave2：boss 叙事（战前/战后对白 + trait 台词横幅） ----------
+
+## boss 显示名（BOSS_CONFIG.name；非 boss/查无 → 空）。
+func _boss_display_name() -> String:
+	var bid: String = String(MetaSession.current_node_cfg.get("boss_id", ""))
+	var cfg: Dictionary = BossConfig.get_boss(bid)
+	return String(cfg.get("name", bid)) if not cfg.is_empty() else ""
+
+## 开对白框。DialogBox 回调恰好一次 → dialog_open 复位 + 框自毁。
+func _show_dialog(lines: Array, speaker: String) -> void:
+	var box := DialogBox.new()
+	add_child(box)
+	box.open(lines, speaker, func() -> void:
+		dialog_open = false
+		box.queue_free())
+
+## trait 台词横幅（顶部红字，自动淡出）。fire-and-forget：调用处不 await——
+## _show_banner 自身是协程，不 await 的调用=立即返回、后台续跑淡出，
+## 保证 _on_reveal 在无横幅时零挂起（协程安全坑⑤）。
+func _show_banner(text: String) -> void:
+	if text == "":
+		return
+	var lbl := Label.new()
+	lbl.text = "「%s」" % text
+	lbl.position = Vector2(360, 12)
+	lbl.add_theme_color_override("font_color", Color(0.85, 0.3, 0.25))
+	_layer.add_child(lbl)
+	if MetaSession.reduce_motion:
+		await get_tree().create_timer(1.6).timeout
+	else:
+		var tw := lbl.create_tween()
+		tw.tween_interval(1.4)
+		tw.tween_property(lbl, "modulate:a", 0.0, 0.6)
+		await tw.finished
+	if is_instance_valid(lbl):
+		lbl.queue_free()
+
+## 读中判定（mind_eye boss 的 read_events 有命中 → read_hit 台词触发条件）。
+func _read_hit_boss(bid: String) -> bool:
+	var tr: String = String(BossConfig.get_boss(bid).get("trait", ""))
+	if tr != "mind_eye":
+		return false
+	for e: Variant in last_read_events:
+		if e.hit:
+			return true
+	return false
+
+## 轮询等对白关（不用信号嵌套，简单可靠）。仅战后对白路径会走到（await 限定）。
+func _wait_dialog_done() -> void:
+	while dialog_open:
+		await get_tree().process_frame
+
 ## 撤退：本场不算（不调 _write_back_result → roster 保持进战前状态），回地图。
 ## 回到进战前的位置（previous_node_id），并把刚进入未通关的节点从 nodes_visited 移除——
 ## 否则 current_node_id 停在战节点，只能沿其 DAG 后继走，换不了同层兄弟节点（玩家验收）。
 func _on_retreat() -> void:
+	if game_over or dialog_open:
+		return   # Wave2：对白播放中不允许撤退（模态）
 	var run := MetaSession.current_run
 	if run != null:
 		var retreated: String = run.current_node_id
