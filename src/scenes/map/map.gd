@@ -2,11 +2,20 @@ extends Node2D
 ## 当前章节节点图（T4 §1）。M3 占位渲染（每层一列按钮）。
 var _layer: CanvasLayer
 var _hint: Label   # 引导/反馈行（玩家验收：点哪个节点不直观）
+var _prose_hint: Label   # Wave2 散文描写行（独立于引导行，防互相覆盖）
 
 func _ready() -> void:
 	# 修 bug：进图时若在 hub（current_node_id 空），定位到当前章 L0 起点，否则无节点可点。
 	if MetaSession.current_run != null:
 		RunFlow.place_at_chapter_start(MetaSession.current_run)
+	# —— Wave2：入章过场（DialogBox 全屏段：章名+散文）——
+	if MetaSession.current_run != null:
+		var seg: String = _seg_open(MetaSession.current_run)
+		if seg != "" and NarrativeRegion.interlude(MetaSession.current_run.current_chapter, seg) != "":
+			MetaSession.current_run.interlude_shown["%d:%s" % [MetaSession.current_run.current_chapter, seg]] = true
+			var box := DialogBox.new()
+			add_child(box)
+			box.open([{"s": "", "line": "第%s章\n\n%s" % [MetaSession.current_run.current_chapter, NarrativeRegion.interlude(MetaSession.current_run.current_chapter, seg)]}], "", func() -> void: box.queue_free())
 	_build_ui()
 
 func _build_ui() -> void:
@@ -58,6 +67,11 @@ func _build_ui() -> void:
 	_hint.text = "→ 点击相邻亮起节点进入（★ 当前位置 · ✓ 已通关可回放 · 灰=未可达）"
 	_hint.add_theme_color_override("font_color", Color(0.5, 0.8, 0.6))
 	_layer.add_child(_hint)
+	# —— Wave2：散文描写行（独立于引导行，防互相覆盖）——
+	_prose_hint = Label.new()
+	_prose_hint.position = Vector2(40, 590)
+	_prose_hint.add_theme_color_override("font_color", Color(0.78, 0.62, 0.42))
+	_layer.add_child(_prose_hint)
 
 ## 节点类型 → 中文标签（玩家验收：start/duel 等英文不直观）。
 func _type_label(ty: String) -> String:
@@ -70,6 +84,21 @@ func _type_label(ty: String) -> String:
 		"escort": return "护送"
 		"boss": return "BOSS"
 		_: return ty
+
+## Wave2：节点层 → 过场段（纯函数可测）。open 段走 _ready 进图路径。
+static func _seg_for_layer(run: RunState, layer: int) -> String:
+	if run == null:
+		return ""
+	if layer == 4 and not run.interlude_shown.has("%d:mid" % run.current_chapter):
+		return "mid"
+	if layer == 7 and not run.interlude_shown.has("%d:close" % run.current_chapter):
+		return "close"
+	return ""
+
+static func _seg_open(run: RunState) -> String:
+	if run == null or run.interlude_shown.has("%d:open" % run.current_chapter):
+		return ""
+	return "open"
 
 ## 点当前节点（★）：不进战，给引导反馈（避免"点了没反应"或"灰锁看不懂"）。
 func _on_current_clicked() -> void:
@@ -84,6 +113,12 @@ func _on_enter_node(node_id: String) -> void:
 	# 先查后进会把所有战斗误标 replay（战前对白永不弹）。
 	var was_visited := RunFlow.is_visited(run, node_id)
 	RunFlow.enter_node(run, node_id)
+	# —— Wave2：L4/L7 进入时散文描写行 ——
+	var layer: int = int(run.chapter_maps[run.current_chapter]["nodes"][node_id]["layer"])
+	var seg2: String = _seg_for_layer(run, layer)
+	if seg2 != "" and _prose_hint != null:
+		run.interlude_shown["%d:%s" % [run.current_chapter, seg2]] = true
+		_prose_hint.text = NarrativeRegion.interlude(run.current_chapter, seg2)
 	var ty: String = run.chapter_maps[run.current_chapter]["nodes"][node_id]["type"]
 	match ty:
 		"boss","duel","sparring","hazard":

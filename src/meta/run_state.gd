@@ -21,6 +21,7 @@ var modifier_state: Dictionary = {}
 # —— 内存态（不序列化，T2）——
 var rest_used: int = 0
 var upgrade_used: int = 0
+var interlude_shown: Dictionary = {}      # Wave2 章节过场/描写行已读标记（"{ch}:{seg}"→true；不序列化，rest_used 模式）
 
 func to_dict() -> Dictionary:
 	return {
@@ -31,7 +32,7 @@ func to_dict() -> Dictionary:
 		"faction_relations": faction_relations, "jianghu_credit": jianghu_credit,
 		"inheritance_slot": inheritance_slot, "chapter_progress": chapter_progress,
 		"run_log": run_log, "modifier_state": modifier_state,
-	}   # 注：rest_used/upgrade_used 不进 to_dict（T2）
+	}   # 注：rest_used/upgrade_used/interlude_shown 不进 to_dict（T2）
 
 static func from_dict(d: Dictionary) -> RunState:
 	var r := RunState.new()
