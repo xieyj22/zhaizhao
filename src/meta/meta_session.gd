@@ -10,6 +10,8 @@ var previous_node_id: String = ""
 ## reduce_motion 跨战斗持久（a11y）：BattleView 每场 new() 会重置实例字段，
 ## 故真实态存此 autoload，battle.gd 同步给 view。不落盘（本会话内存态）。
 var reduce_motion: bool = false
+## Wave2 codex：上次 hub 展示时的已解锁数（-1=未初始化，首次不报新增）。会话内存态。
+var codex_seen_count: int = -1
 
 func _ready() -> void:
 	if meta_state == null:

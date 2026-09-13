@@ -8,6 +8,7 @@ var _btn_rest: Button             # 镖局休整（T10c：满血×rest_cap/章�
 var _btn_continue: Button         # 继续闯荡（无进行中 run 时 disabled——防 permadeath 后静默 no-op）
 var _feedback: Label              # 操作反馈（休整/招募结果）
 var _recruit_panel: VBoxContainer # 派系子按钮列表（展开/收起）
+var _codex_layer: CanvasLayer = null   # Wave2 江湖志：面板层（layer 40；null=关）
 
 func _ready() -> void:
 	# 用 autoload 已加载的 meta_state（battle.gd commit/通关后即时更新内存态）；
@@ -54,6 +55,11 @@ func _build_ui() -> void:
 	_btn_rest.disabled = not _can_rest()
 	_btn_rest.pressed.connect(_on_rest)
 	root.add_child(_btn_rest)
+	# —— Wave2: 江湖志（codex 面板入口，三 tab 人物志/山河志/武道志）——
+	var btn_codex := Button.new()
+	btn_codex.text = "江湖志"
+	btn_codex.pressed.connect(_on_open_codex)
+	root.add_child(btn_codex)
 
 func _refresh_status() -> void:
 	var m := MetaSession.meta_state
@@ -75,6 +81,11 @@ func _refresh_status() -> void:
 	# 继续闯荡按钮 disabled 当无进行中 run（permadeath 后 / 未开局）
 	if _btn_continue != null:
 		_btn_continue.disabled = MetaSession.current_run == null
+	# —— Wave2：codex 新解锁反馈（一次性）——
+	var hint: String = _codex_new_hint(MetaSession.meta_state, MetaSession.codex_seen_count)
+	if hint != "":
+		_set_feedback(hint)
+	MetaSession.codex_seen_count = CodexUnlock.unlocked_ids(MetaSession.meta_state).size() + _personae_count(MetaSession.meta_state)
 
 ## M3.5: modifier_state → 中文简述（hook 反推；M4 可换 modifier_ids 反查 POOL 取 name/desc）。
 ## 用 hook 键而非 id（meta UI 展示的是「效果」而非「名字」，避免 meta 改 POOL 文案时此处失同步）。
@@ -91,6 +102,31 @@ func _modifier_brief(ms: Dictionary) -> String:
 	if ms.has("hazard_node_count_delta"): parts.append("险地频仍")
 	if ms.has("kit_stance_speed_bonus"): parts.append("厚土镇煞")
 	return ", ".join(parts) if not parts.is_empty() else "风平浪静"
+
+## Wave2：新解锁反馈文案（纯函数可测）。人物志动态条目计入 unlocked 数。
+static func _codex_new_hint(meta: MetaState, seen: int) -> String:
+	var n: int = CodexUnlock.unlocked_ids(meta).size() + _personae_count(meta)
+	if seen < 0 or n <= seen:
+		return ""
+	return "江湖志新增 %d 条" % (n - seen)
+
+## 人物志动态条目（BOSS_NARRATIVE 在表 boss ↔ 人物志条目；locked=未击败）。
+static func _personae_entries(meta: MetaState) -> Array:
+	var out: Array = []
+	for bid: Variant in NarrativeBoss.BOSS_NARRATIVE:
+		var cfg: Dictionary = BossConfig.get_boss(String(bid))
+		out.append({
+			"id": String(bid),
+			"category": "人物志",
+			"title": "%s·%s" % [cfg.get("title", ""), cfg.get("name", String(bid))],
+			"body": String(NarrativeBoss.entry(String(bid)).get("bio", "")),
+			"locked": not meta.bosses_defeated_all.has(bid),
+			"unlock": {"type": "boss_defeated", "key": String(bid)},
+		})
+	return out
+
+static func _personae_count(meta: MetaState) -> int:
+	return _personae_entries(meta).filter(func(e): return not e["locked"]).size()
 
 ## 招募 gate：roster_cap 未满 + 信用够（材料）+ 至少一个派系关系达阈值（can_recruit，F8 不可招）。
 func _can_recruit() -> bool:
@@ -214,3 +250,86 @@ func _on_open_map() -> void:
 
 func _open_map() -> void:
 	get_tree().change_scene_to_file("res://src/scenes/map/map.tscn")
+
+# —— Wave2: 江湖志面板（人物志/山河志/武道志 三 tab）——
+
+func _on_open_codex() -> void:
+	if _codex_layer != null:
+		return
+	_codex_layer = CanvasLayer.new()
+	_codex_layer.layer = 40
+	add_child(_codex_layer)
+	_build_codex_panel("人物志")
+
+func _build_codex_panel(tab: String) -> void:
+	for c in _codex_layer.get_children():
+		c.queue_free()
+	var meta := MetaSession.meta_state
+	var root := VBoxContainer.new()
+	root.position = Vector2(120, 40)
+	root.custom_minimum_size = Vector2(1040, 660)
+	_codex_layer.add_child(root)
+	var tabs := HBoxContainer.new()
+	root.add_child(tabs)
+	for t: String in ["人物志", "山河志", "武道志"]:
+		var tb := Button.new()
+		tb.text = t
+		tb.disabled = (t == tab)
+		tb.pressed.connect(_build_codex_panel.bind(t))
+		tabs.add_child(tb)
+	var close := Button.new()
+	close.text = "关闭（Esc）"
+	close.pressed.connect(_on_close_codex)
+	tabs.add_child(close)
+	var body := HBoxContainer.new()
+	root.add_child(body)
+	var list := ScrollContainer.new()
+	list.custom_minimum_size = Vector2(300, 560)
+	body.add_child(list)
+	var list_v := VBoxContainer.new()
+	list.add_child(list_v)
+	var detail := ScrollContainer.new()
+	detail.custom_minimum_size = Vector2(720, 560)
+	body.add_child(detail)
+	var detail_lbl := Label.new()
+	detail_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	detail_lbl.custom_minimum_size = Vector2(700, 0)
+	detail.add_child(detail_lbl)
+	var entries: Array = _personae_entries(meta) if tab == "人物志" else _codex_static_entries(tab, meta)
+	for e: Variant in entries:
+		var d: Dictionary = e
+		var btn := Button.new()
+		var locked: bool = d.get("locked", false)
+		btn.text = "？？？ " if locked else String(d.get("title", ""))
+		if locked:
+			btn.text += CodexUnlock.hint_for(d) if d.has("unlock") else ""
+			btn.disabled = d.get("body", "") == "" and not (tab == "山河志")
+		btn.pressed.connect(func() -> void:
+			detail_lbl.text = ("【未解锁】" + CodexUnlock.hint_for(d)) if locked else _codex_body_of(d)
+		)
+		list_v.add_child(btn)
+
+func _codex_static_entries(tab: String, meta: MetaState) -> Array:
+	var out: Array = []
+	for e: Variant in NarrativeCodex.CODEX_ENTRIES:
+		var d: Dictionary = e
+		if String(d.get("category", "")) != tab:
+			continue
+		var c: Dictionary = d.duplicate(true)
+		c["locked"] = not CodexUnlock.is_unlocked(d, meta)
+		out.append(c)
+	return out
+
+func _codex_body_of(d: Dictionary) -> String:
+	if d.has("region_id") and String(d["region_id"]) != "":
+		return NarrativeRegion.prose(String(d["region_id"]))
+	return String(d.get("body", ""))
+
+func _on_close_codex() -> void:
+	if _codex_layer != null:
+		_codex_layer.queue_free()
+		_codex_layer = null
+
+func _unhandled_input(ev: InputEvent) -> void:
+	if ev is InputEventKey and ev.pressed and ev.keycode == KEY_ESCAPE and _codex_layer != null:
+		_on_close_codex()
