@@ -264,6 +264,13 @@ func _on_open_codex() -> void:
 func _build_codex_panel(tab: String) -> void:
 	for c in _codex_layer.get_children():
 		c.queue_free()
+	# 全屏暗底（spec §3.4 全屏面板）：恒为首子=绘于内容 VBox 之下；放本函数内随
+	# tab 清空重建幂等补回。CanvasLayer 下 position 相对锚点解析（本 wave 教训：
+	# 偏移锚点会出屏），FULL_RECT 零偏移=恰为 viewport 全屏，勿再设 position。
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.03, 0.03, 0.025, 0.74)   # 焦墨暗底
+	_codex_layer.add_child(dim)
 	var meta := MetaSession.meta_state
 	var root := VBoxContainer.new()
 	root.position = Vector2(120, 40)
