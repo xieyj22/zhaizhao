@@ -55,6 +55,19 @@ func test_fallback_name_used_when_s_empty():
 	box.open([{"s": "", "line": "旁白一句"}], "旁白", func(): pass)
 	assert_eq(box.current_name(), "旁白", "条目 s 为空时回退 open 的 name_label 默认名条")
 
+func test_panel_anchors_zero_position_absolute():
+	# 回归（T7 真机验收）：CanvasLayer 的子 Control 锚点按视口解析，CENTER_BOTTOM 会把
+	# position(120,480) 当成锚点(640,800)的相对偏移 → 全局(760,1280) 出屏不可见。
+	# 锚点全 0（TOP_LEFT）时 position 即绝对坐标，不随视口尺寸漂移。
+	var box := _make_box()
+	await get_tree().process_frame
+	var panel: PanelContainer = box._panel
+	assert_eq(panel.anchor_left, 0.0, "左锚点为 0")
+	assert_eq(panel.anchor_right, 0.0, "右锚点为 0")
+	assert_eq(panel.anchor_top, 0.0, "上锚点为 0")
+	assert_eq(panel.anchor_bottom, 0.0, "下锚点为 0")
+	assert_eq(panel.position, Vector2(120, 480), "面板绝对坐标 (120,480)")
+
 func test_unhandled_input_space_advances_echo_ignored():
 	var box := _make_box()
 	box.open(LINES, "test", func(): pass)

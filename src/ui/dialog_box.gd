@@ -19,7 +19,9 @@ func _ready() -> void:
 	layer = 50
 	var panel := PanelContainer.new()
 	_panel = panel
-	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	# 父节点是 CanvasLayer（非 Control），锚点按视口解析：CENTER_BOTTOM 会把 position 当成
+	# 锚点(640,800)的相对偏移 → 全局(760,1280) 出屏。锚点全 0 时 position 即绝对坐标。
+	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	panel.position = Vector2(120, 480)
 	panel.custom_minimum_size = Vector2(1040, 220)
 	panel.self_modulate = Color(0.06, 0.05, 0.04, 0.92)   # 焦墨
