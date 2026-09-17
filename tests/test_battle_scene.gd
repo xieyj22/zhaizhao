@@ -223,7 +223,8 @@ func test_mind_eye_predictions_forwarded_to_orch_after_reveal():
 	var run := RunFactory.init_run(meta, 7)
 	MetaSession.current_run = run
 	# sikongyi 在 [5,3]，玩家主角在 [1,3]（init_run 默认）——同列相邻近，AI 会预测玩家招
-	MetaSession.current_node_cfg = {"boss_id":"sikongyi","node_type":"boss"}
+	# replay:true 关战前对白（批B 灌入 pre 后 dialog_open 会门住 _on_reveal；本测只验预测转发）
+	MetaSession.current_node_cfg = {"boss_id":"sikongyi","node_type":"boss","replay":true}
 	var battle := preload("res://src/scenes/battle/battle.tscn").instantiate()
 	add_child(battle)
 	# 确认是 mind_eye boss 战
