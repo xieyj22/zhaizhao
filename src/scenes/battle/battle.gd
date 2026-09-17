@@ -62,10 +62,21 @@ func _ready() -> void:
 	_refresh()
 	# —— Wave2：战前对白（boss 非回放；空数据不弹）。不 await——不阻塞 _ready，
 	# dialog_open 由 DialogBox 回调（恰好一次）复位。
-	var pre_lines: Array = _dialog_lines_for(MetaSession.current_node_cfg, "pre")
+	# —— 终审修（Important#1）：map 战斗切换路径带出的本章 close/mid 过场段
+	# （node_cfg.interlude_line，map 侧仅非回放带出），作为空 s 旁白行 prepend 进
+	# 战前对白（无 pre_lines 则单独弹）；回放一律不弹（双门兜底）。
+	# 缺键默认空 → 无 interlude_line 的老路径（手造 node_cfg 测试/2v2 回退）逐字节不变。
+	var interlude_line: String = String(MetaSession.current_node_cfg.get("interlude_line", ""))
+	var has_narration: bool = interlude_line != "" and not bool(MetaSession.current_node_cfg.get("replay", false))
+	var pre_lines: Array = []
+	if has_narration:
+		pre_lines.append({"s": "", "line": interlude_line})
+	pre_lines += _dialog_lines_for(MetaSession.current_node_cfg, "pre")
 	if not pre_lines.is_empty():
 		dialog_open = true
-		_show_dialog(pre_lines, _boss_display_name())
+		# 旁白行 s=""：DialogBox 空名条回退到框名——带旁白时框名传空（与 map 过场
+		# 同观感）；boss 台词自带 s 名条不受影响。
+		_show_dialog(pre_lines, "" if has_narration else _boss_display_name())
 
 func _mk(id, team, pos, stance) -> UnitState:
 	var u := UnitState.new()
@@ -207,8 +218,8 @@ func _refresh() -> void:
 ## M 键切换简洁动效（reduce_motion：破绽脉冲/受击闪白/飘字动画/HP lerp 降级或静化）。
 ## a11y 收尾——动效敏感用户。态存 MetaSession 跨战斗持久（不落盘）。
 func _unhandled_input(event: InputEvent) -> void:
-	if game_over:
-		return   # 战斗结束后不重建 UI（防残留 picker）
+	if game_over or dialog_open:
+		return   # 战斗结束后不重建 UI（防残留 picker）；对白模态期不切换（终审修 Minor#2）
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_M:
 			MetaSession.reduce_motion = not MetaSession.reduce_motion

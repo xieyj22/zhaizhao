@@ -100,6 +100,18 @@ static func _seg_open(run: RunState) -> String:
 		return ""
 	return "open"
 
+## 本章过场段文本（实例薄封装：终审修测试以子类覆写本 seam 注入非空段——
+## CHAPTER_INTERLUDES 是 const，运行时只读不可 patch；生产路径恒 NarrativeRegion 直读）。
+func _interlude_text(seg: String) -> String:
+	var run := MetaSession.current_run
+	if run == null or seg == "":
+		return ""
+	return NarrativeRegion.interlude(run.current_chapter, seg)
+
+## 切战斗场景（抽 seam：终审修测试以子类覆写拦截真实切场景，断言 node_cfg 传递）。
+func _enter_battle_scene() -> void:
+	get_tree().change_scene_to_file("res://src/scenes/battle/battle.tscn")
+
 ## 点当前节点（★）：不进战，给引导反馈（避免"点了没反应"或"灰锁看不懂"）。
 func _on_current_clicked() -> void:
 	if _hint != null:
@@ -113,28 +125,45 @@ func _on_enter_node(node_id: String) -> void:
 	# 先查后进会把所有战斗误标 replay（战前对白永不弹）。
 	var was_visited := RunFlow.is_visited(run, node_id)
 	RunFlow.enter_node(run, node_id)
-	# —— Wave2：L4/L7 进入时散文描写行 ——
+	# —— Wave2：L4/L7 进入时过场段 ——
 	var layer: int = int(run.chapter_maps[run.current_chapter]["nodes"][node_id]["layer"])
 	var seg2: String = _seg_for_layer(run, layer)
-	if seg2 != "" and _prose_hint != null:
-		run.interlude_shown["%d:%s" % [run.current_chapter, seg2]] = true
-		_prose_hint.text = NarrativeRegion.interlude(run.current_chapter, seg2)
+	var seg2_text: String = _interlude_text(seg2) if seg2 != "" else ""
 	var ty: String = run.chapter_maps[run.current_chapter]["nodes"][node_id]["type"]
 	match ty:
 		"boss","duel","sparring","hazard":
 			MetaSession.current_node_cfg = _node_cfg_for(ty, node_id)
 			if was_visited:
 				MetaSession.current_node_cfg["replay"] = true   # Wave2：回放战跳过对白
-			get_tree().change_scene_to_file("res://src/scenes/battle/battle.tscn")
+			elif seg2_text != "":
+				# —— 终审修（Important#1）：战斗节点必切场景，_prose_hint 设在将销毁的场景上
+				# 玩家永读不到（L7 恒 boss；mid 仅 L4 恰为 visit/escort 才可见），且标记已烧
+				# （撤退回图也不再显示）。改为把过场段经 node_cfg.interlude_line 带给 battle
+				# 作战前旁白行；仅实际带出（将显示）才烧 interlude_shown。 ——
+				MetaSession.current_node_cfg["interlude_line"] = seg2_text
+				run.interlude_shown["%d:%s" % [run.current_chapter, seg2]] = true
+			_enter_battle_scene()
 		"visit","escort":
 			# —— T10 招募经济：访问/护送节点挣信用（招募同袍的材料）——
 			run.jianghu_credit += Tuning.new().credit_per_visit
 			var reward: Variant = UnlockRules.roll_unlock_reward(MetaSession.meta_state.meta_unlocked_pool, ty, _node_cfg_for(ty,node_id), run.rng_seed)
 			if reward != null and not run.unlocked_techniques.has(reward):
 				run.unlocked_techniques.append(reward)
+			_show_interlude_prose(run, seg2, seg2_text)
 			_refresh_scene()
 		"start","_":
+			_show_interlude_prose(run, seg2, seg2_text)
 			_refresh_scene()
+
+## 非战斗节点（visit/escort/start，不切场景）：散文行+烧标记。
+## 非空门（终审修 Finding 3）：段文本空不烧——与 open 路径（_ready 的 interlude != "" 门）
+## 一致，空段烧标记会让本章该段永不再显示（批D 灌入前 mid/close 恒空）。
+func _show_interlude_prose(run: RunState, seg: String, text: String) -> void:
+	if text == "":
+		return
+	run.interlude_shown["%d:%s" % [run.current_chapter, seg]] = true
+	if _prose_hint != null:
+		_prose_hint.text = text
 
 func _node_cfg_for(node_type: String, node_id: String) -> Dictionary:
 	# —— T10e Bug A：读节点真实数据，让 BattleBuilder 构造 boss / EnemyPool 抽敌人 ——
