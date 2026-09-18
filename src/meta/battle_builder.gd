@@ -40,6 +40,7 @@ static func _unit_from_roster(pd: Dictionary, run: RunState) -> UnitState:
 	var u := UnitState.from_dict(pd)   # 填 11 个战斗字段
 	u.id = StringName(pd.get("id","u"))
 	u.kit = _build_kit(pd.get("kit_ids",[]), run)
+	u.faction = String(pd.get("faction_id", ""))
 	return u
 
 static func _unit_from_enemy(ed: Dictionary) -> UnitState:
@@ -55,6 +56,7 @@ static func _unit_from_enemy(ed: Dictionary) -> UnitState:
 	u.max_hp = hp
 	u.kit = _build_kit(ed.get("kit",[]), RunState.new())   # 敌方无 variant（run 空）
 	u.display_name = String(ed.get("display_name", "敌方"))   # 普通敌人兜底"敌方"（不显示裸 id）
+	u.faction = String(ed.get("faction", ""))   # boss 单位不填——sprite 走 boss_id 链
 	return u
 
 ## boss 敌方单位：查 BOSS_CONFIG 取 personality/stance/kit/hp_base。

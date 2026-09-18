@@ -23,6 +23,8 @@ var boss_id: String = ""
 var kit: Array = []   # Array[Technique]，战斗态，不序列化
 ## 显示名（玩家验收：战斗界面显示真名而非内部 id）。由 battle_builder 填充（roster pd / BOSS_CONFIG.name / 兜底）。不入 to_dict。
 var display_name: String = ""
+## 门派 id（sprite 映射用，m4c）。builder 填充；不入 to_dict（沿 display_name 惯例）。
+var faction: String = ""
 
 ## 渲染用名：有 display_name 用之，否则回退 id（绝不显示空）。
 func display_label() -> String:
@@ -61,4 +63,5 @@ static func from_dict(d: Dictionary) -> UnitState:
 	u.frenzied = d.get("frenzied", false)
 	u.boss_id = d.get("boss_id", "")
 	u.display_name = String(d.get("display_name", ""))
+	u.faction = String(d.get("faction", ""))
 	return u
