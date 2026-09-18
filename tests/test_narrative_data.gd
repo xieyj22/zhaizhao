@@ -47,3 +47,23 @@ func test_db_facade_forwards():
 	assert_eq(NarrativeDB.boss_line("zongzhenglie", "frenzy_on"), NarrativeBoss.line("zongzhenglie", "frenzy_on"))
 	assert_eq(NarrativeDB.prose("chenjianggu"), NarrativeRegion.prose("chenjianggu"))
 	assert_eq(NarrativeDB.interlude(9, "open"), "")
+
+func test_wave2_final_completeness():
+	assert_eq(NarrativeBoss.BOSS_NARRATIVE.size(), 8, "8 boss 全量")
+	for bid in ["hailianzheng", "moqingniang", "yanjiu", "zongzhenglie", "peiyuan", "sikongyi", "leiwanjun", "yanwujiu"]:
+		assert_true(NarrativeBoss.BOSS_NARRATIVE.has(bid), "%s 在表" % bid)
+	assert_eq(NarrativeRegion.REGION_PROSE.size(), 5, "5 区散文")
+	for ch in [1, 2, 3, 4]:
+		for seg in ["open", "mid", "close"]:
+			assert_gt(NarrativeRegion.interlude(ch, seg).length(), 50, "章%d %s" % [ch, seg])
+	var geo := 0; var wu := 0
+	for e in NarrativeCodex.CODEX_ENTRIES:
+		var d: Dictionary = e
+		if d["category"] == "山河志": geo += 1
+		if d["category"] == "武道志": wu += 1
+	assert_eq(geo, 5, "山河志 5 条")
+	assert_eq(wu, 43, "武道志 5+16+14+8=43 条")
+	# trait_lines 覆盖：三个触发点各有主
+	assert_true(NarrativeBoss.line("leiwanjun", "frenzy_on") != "")
+	assert_true(NarrativeBoss.line("yanwujiu", "drain_on") != "")
+	assert_true(NarrativeBoss.line("sikongyi", "read_hit") != "")

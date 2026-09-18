@@ -21,7 +21,16 @@ const FRAMES_AFTER_FREE := 2
 func _initialize() -> void:
 	call_deferred("_snap_all")
 
+var dialog_mode := false
+var frames_before_shot := FRAMES_BEFORE_SHOT
+
 func _snap_all() -> void:
+	# --dialog（user args）：replay=false → _ready 自动弹战前对白框（Task 13 Step 4
+	# 对白快照用）；多等帧盖过 DialogBox 0.18s 淡入。默认仍 replay=true 截战斗本体。
+	for a: String in OS.get_cmdline_user_args():
+		if a == "--dialog":
+			dialog_mode = true
+			frames_before_shot = 12
 	DirAccess.make_dir_recursive_absolute(SHOTS_DIR)
 	# 首玩默认 meta（足够构造 boss 战）；每 boss 新 run 保证确定性。
 	var meta := MetaState.new_first_play()
@@ -65,7 +74,7 @@ func _snap_one(bid: String, meta: MetaState, root: Window, meta_session: Node) -
 	# 设 run 当前章 = boss 所在章（影响 BB 难度曲线 + EnemyPool 兜底）
 	run.current_chapter = int(cfg.get("chapter", 1))
 	meta_session.set("current_run", run)
-	meta_session.set("current_node_cfg", {"boss_id": bid, "node_type": "boss", "replay": true})   # replay：跳过战前对白，截战斗布局本体（Wave2）
+	meta_session.set("current_node_cfg", {"boss_id": bid, "node_type": "boss", "replay": not dialog_mode})   # replay=true 跳过对白截战斗本体；--dialog 时 false 弹对白框
 	var battle: Node2D = null
 	var img: Image = null
 	# —— instantiate + 等帧渲染 ——
@@ -76,7 +85,7 @@ func _snap_one(bid: String, meta: MetaState, root: Window, meta_session: Node) -
 		return "无法加载 battle.tscn"
 	battle = tscn.instantiate() as Node2D
 	root.add_child(battle)
-	for i in FRAMES_BEFORE_SHOT:
+	for i in frames_before_shot:
 		await process_frame
 	# —— 截图 ——
 	var vp := battle.get_viewport()
@@ -91,7 +100,7 @@ func _snap_one(bid: String, meta: MetaState, root: Window, meta_session: Node) -
 	if img == null:
 		_cleanup(battle)
 		return "get_image() 返回 null"
-	var err_code := img.save_png(SHOTS_DIR + "snap_%s.png" % bid)
+	var err_code := img.save_png(SHOTS_DIR + ("snapd_%s.png" if dialog_mode else "snap_%s.png") % bid)
 	_cleanup(battle)
 	if err_code != OK:
 		return "save_png 错误码 %d" % err_code
