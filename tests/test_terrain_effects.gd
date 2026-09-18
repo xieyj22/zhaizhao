@@ -81,3 +81,28 @@ func test_hazard_cell_stacks_with_chaos():
 	var s2 := _state()
 	TurnOrchestrator.new(s2, Tuning.new()).end_turn()
 	assert_eq(s.units[0].opening, s2.units[0].opening + 2, "格级险地与节点级 chaos 叠加")
+
+func test_ai_enumerate_skips_obstacle_move():
+	var kit := [_move(2, 0)]
+	var s := _state({"3,3": TerrainRules.OBSTACLE})
+	assert_eq(AIController._enumerate(s.units[0], s, Tuning.new(), kit).size(), 0, "落点障碍 → 无 MOVE 候选")
+	var s2 := _state()
+	assert_eq(AIController._enumerate(s2.units[0], s2, Tuning.new(), kit).size(), 1, "对照：无障碍候选在")
+
+func test_ai_score_prefers_highland_move():
+	var act := Resolver.Action.new(null, _move(2, 0), Vector2i.ZERO)
+	var s := _state({"3,3": TerrainRules.HIGHLAND})
+	var s2 := _state()
+	var t := Tuning.new()
+	var sc_hi: float = AIController._score(act, s.units[0], s, t, {}, null, null, null)
+	var sc_pl: float = AIController._score(act, s2.units[0], s2, t, {}, null, null, null)
+	assert_gt(sc_hi, sc_pl, "高地落点效用更高")
+
+func test_ai_score_penalizes_hazard_move():
+	var act := Resolver.Action.new(null, _move(2, 0), Vector2i.ZERO)
+	var s := _state({"3,3": TerrainRules.HAZARD})
+	var s2 := _state()
+	var t := Tuning.new()
+	var sc_hz: float = AIController._score(act, s.units[0], s, t, {}, null, null, null)
+	var sc_pl: float = AIController._score(act, s2.units[0], s2, t, {}, null, null, null)
+	assert_lt(sc_hz, sc_pl, "险地落点效用更低")

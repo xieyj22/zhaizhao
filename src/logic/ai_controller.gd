@@ -60,7 +60,7 @@ static func _enumerate(u: UnitState, state: BattleState, tuning: Tuning, kit: Ar
 						out.append(Candidate.new(Resolver.Action.new(u, tech, e.grid_pos)))
 			Technique.Type.MOVE:
 				var dest := state.clamp_to_grid(u.grid_pos + tech.move_delta)
-				if dest != u.grid_pos:
+				if dest != u.grid_pos and not TerrainRules.blocks_move(state.terrain, dest):
 					out.append(Candidate.new(Resolver.Action.new(u, tech, u.grid_pos)))
 			Technique.Type.STANCE_SWITCH:
 				if tech.resulting_stance != u.stance:
@@ -136,6 +136,11 @@ static func _score(a: Resolver.Action, u: UnitState, state: BattleState, tuning:
 		var after_pos := state.clamp_to_grid(u.grid_pos + tech.move_delta)
 		var after := _nearest_enemy_dist(after_pos, u.team, state)
 		position_value += float(before - after)
+		# —— m4c: 地形项（L1 小权重；空 terrain 恒旁路）——
+		if TerrainRules.is_highland(state.terrain, after_pos):
+			position_value += 0.5
+		elif TerrainRules.is_water(state.terrain, after_pos) or TerrainRules.is_hazard(state.terrain, after_pos):
+			position_value -= 0.6
 		if morale_active:
 			morale_agg += float(before - after)
 	elif tech.type == Technique.Type.STANCE_SWITCH:
