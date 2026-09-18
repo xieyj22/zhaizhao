@@ -66,3 +66,18 @@ func test_obstacle_blocks_move():
 	var s2 := _state()
 	Resolver.resolve([Resolver.Action.new(s2.units[0], _move(2, 0), s2.units[0].grid_pos)], s2, Tuning.new())
 	assert_eq(s2.units[0].grid_pos, Vector2i(3, 3), "对照：无障碍移动成功")
+
+func test_hazard_cell_opening_plus_one():
+	var s := _state({"1,3": TerrainRules.HAZARD})
+	TurnOrchestrator.new(s, Tuning.new()).end_turn()
+	var s2 := _state()
+	TurnOrchestrator.new(s2, Tuning.new()).end_turn()
+	assert_eq(s.units[0].opening, s2.units[0].opening + 1, "险地格站上 end_turn 多 +1 破绽")
+
+func test_hazard_cell_stacks_with_chaos():
+	var s := _state({"1,3": TerrainRules.HAZARD})
+	s.hazard_modifiers = {"chaos": true}
+	TurnOrchestrator.new(s, Tuning.new()).end_turn()
+	var s2 := _state()
+	TurnOrchestrator.new(s2, Tuning.new()).end_turn()
+	assert_eq(s.units[0].opening, s2.units[0].opening + 2, "格级险地与节点级 chaos 叠加")

@@ -34,6 +34,13 @@ static func build(run: RunState, node_cfg: Dictionary) -> BattleState:
 	for k in baseline:
 		hz[k] = baseline[k]
 	s.hazard_modifiers = hz
+	# —— m4c: 格级地形（node_cfg.terrain 显式覆盖优先；否则 seed 确定性生成）——
+	var spawn: Array = []
+	for u in units:
+		spawn.append(TerrainRules.key(u.grid_pos.x, u.grid_pos.y))
+	s.terrain = node_cfg.get("terrain", TerrainGen.generate(run.rng_seed,
+		String(node_cfg.get("id", "")), String(node_cfg.get("node_type", "")),
+		run.current_chapter, spawn))
 	return s
 
 static func _unit_from_roster(pd: Dictionary, run: RunState) -> UnitState:

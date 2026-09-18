@@ -84,6 +84,9 @@ func end_turn() -> void:
 		# —— M3: chaos 险地（气场紊乱）每回合 opening +1 ——
 		if state.hazard_modifiers.get("chaos", false):
 			add += 1
+		# —— m4c: 险地格（立足险地）站上 opening +1；与节点级 chaos 叠加 ——
+		if TerrainRules.is_hazard(state.terrain, u.grid_pos):
+			add += 1
 		var decay := maxi(0, tuning.opening_decay_per_turn - Morale.decay_modifier(state.turn, tuning))
 		if Stance.role(u.stance) == Stance.Role.DEFENSIVE:
 			decay += tuning.defensive_decay_bonus

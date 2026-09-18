@@ -83,3 +83,31 @@ func test_stress_160_generations():
 			assert_true(kinds.has(TerrainRules.HAZARD))
 		else:
 			assert_true(kinds.has(TerrainRules.OBSTACLE) and kinds.has(TerrainRules.WATER) and kinds.has(TerrainRules.HIGHLAND), "seed %d 三类齐" % i)
+
+func _run_state() -> RunState:
+	var r := RunState.new()
+	r.unlocked_techniques = ["jingzhao_chuzhao"]
+	r.player_roster = [{"id":"protagonist","team":0,"hp":20,"max_hp":20,"opening":0,"max_opening":6,
+		"stance":0,"grid_pos":[1,3],"facing":0,"guard_broken":false,"alive":true,
+		"display_name":"遗照","faction_id":"F1","personality_id":"brain",
+		"kit_ids":["jingzhao_chuzhao"],"is_protagonist":true}]
+	return r
+
+func test_builder_terrain_deterministic():
+	var cfg := {"id": "n1", "node_type": "duel"}
+	var a := BattleBuilder.build(_run_state(), cfg)
+	var b := BattleBuilder.build(_run_state(), cfg)
+	assert_eq(JSON.stringify(a.terrain), JSON.stringify(b.terrain))
+	assert_gt(a.terrain.size(), 0, "duel 节点有地形")
+
+func test_builder_terrain_override():
+	var cfg := {"id": "n1", "node_type": "duel", "terrain": {"2,2": "water"}}
+	var s := BattleBuilder.build(_run_state(), cfg)
+	assert_eq(JSON.stringify(s.terrain), JSON.stringify({"2,2": "water"}), "node_cfg.terrain 显式覆盖优先")
+
+func test_builder_terrain_avoids_spawn():
+	var cfg := {"id": "n1", "node_type": "duel", "enemies": [
+		{"id":"e1","faction":"F2","grid_pos":[5,3],"stance":1,"kit":["chifeng_lianci"]}]}
+	var s := BattleBuilder.build(_run_state(), cfg)
+	assert_false(s.terrain.has("1,3"), "主角出生格无地形")
+	assert_false(s.terrain.has("5,3"), "敌人出生格无地形")
