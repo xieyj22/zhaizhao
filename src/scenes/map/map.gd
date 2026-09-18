@@ -3,6 +3,7 @@ extends Node2D
 var _layer: CanvasLayer
 var _hint: Label   # 引导/反馈行（玩家验收：点哪个节点不直观）
 var _prose_hint: Label   # Wave2 散文描写行（独立于引导行，防互相覆盖）
+var _prose_text := ""   # 描写行文本真源：_refresh_scene 会 free _prose_hint 并重建，须从字段重挂
 
 func _ready() -> void:
 	# 修 bug：进图时若在 hub（current_node_id 空），定位到当前章 L0 起点，否则无节点可点。
@@ -72,6 +73,7 @@ func _build_ui() -> void:
 	_prose_hint.position = Vector2(40, 590)
 	_prose_hint.add_theme_color_override("font_color", Color(0.78, 0.62, 0.42))
 	_layer.add_child(_prose_hint)
+	_prose_hint.text = _prose_text   # 终审转账项：_refresh_scene 重建后重挂 mid 散文（防幽灵行）
 
 ## 节点类型 → 中文标签（玩家验收：start/duel 等英文不直观）。
 func _type_label(ty: String) -> String:
@@ -162,6 +164,8 @@ func _show_interlude_prose(run: RunState, seg: String, text: String) -> void:
 	if text == "":
 		return
 	run.interlude_shown["%d:%s" % [run.current_chapter, seg]] = true
+	# 先存字段再设标签——标签随后会被 _refresh_scene free 并在 _build_ui 重建（重挂自字段）
+	_prose_text = text
 	if _prose_hint != null:
 		_prose_hint.text = text
 

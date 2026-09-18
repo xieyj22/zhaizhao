@@ -89,12 +89,51 @@ func test_enter_battle_node_replay_no_carry_no_burn():
 	map.queue_free()
 
 func test_enter_battle_node_empty_interlude_not_burned():
-	# 非空门（Finding 3）：真实数据 ch3 close/mid=""（批D 未灌）→ 空段不带不烧标记
+	# 非空门（Finding 3）：stub 注入空段 → 空段不带不烧标记
 	var r := _run_ch3()
 	var boss_node := _zzl_boss_node(r)
 	var map := _stub_map(r, "")
 	map._on_enter_node(boss_node)
 	assert_false(MetaSession.current_node_cfg.has("interlude_line"), "空段不带")
 	assert_false(r.interlude_shown.has("3:close"), "空段不烧标记（与 open 路径非空门一致）")
+	remove_child(map)
+	map.queue_free()
+
+# ---- 终审转账项：visit/escort/start 非战斗节点的 mid 散文行（幽灵描写行） ----
+# 根因：_on_enter_node 非战斗路径先 _show_interlude_prose 设 _prose_hint.text，再
+# _refresh_scene()——后者 free _layer 全部子节点（含 _prose_hint）并在 _build_ui 里
+# 重建为空 → 文本至多存活一帧且 interlude_shown 已烧，玩家永远读不到。
+# 修法：_show_interlude_prose 先存实例字段 _prose_text，_build_ui 重建 _prose_hint
+# 后从字段重挂文本。
+
+func _visit_node(r: RunState) -> String:
+	for nid: Variant in r.chapter_maps[3]["nodes"]:
+		if r.chapter_maps[3]["nodes"][nid]["type"] == "visit":
+			return String(nid)
+	return ""
+
+func test_enter_visit_node_mid_prose_survives_refresh():
+	var r := _run_ch3()
+	var visit_node := _visit_node(r)
+	assert_ne(visit_node, "", "ch3 图有 visit 节点（类型下限 visit>=1）")
+	r.chapter_maps[3]["nodes"][visit_node]["layer"] = 4   # mid 段触发层
+	var map := _stub_map(r, "雾从谷底漫上来，一寸一寸漫过锈剑。")
+	map._on_enter_node(visit_node)
+	await get_tree().process_frame   # 等 _refresh_scene 的重建落地
+	assert_true(r.interlude_shown.has("3:mid"), "进 L4 visit：mid 标记已烧")
+	assert_eq(map._prose_hint.text, "雾从谷底漫上来，一寸一寸漫过锈剑。",
+		"_refresh_scene 重建后 _prose_hint 仍持有 mid 段文本（非幽灵行）")
+	remove_child(map)
+	map.queue_free()
+
+func test_enter_visit_node_empty_interlude_not_burned_hint_empty():
+	var r := _run_ch3()
+	var visit_node := _visit_node(r)
+	r.chapter_maps[3]["nodes"][visit_node]["layer"] = 4
+	var map := _stub_map(r, "")
+	map._on_enter_node(visit_node)
+	await get_tree().process_frame
+	assert_false(r.interlude_shown.has("3:mid"), "空段不烧标记（非空门不回退）")
+	assert_eq(map._prose_hint.text, "", "空段：hint 空")
 	remove_child(map)
 	map.queue_free()
