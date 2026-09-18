@@ -26,7 +26,7 @@ static func _perceived_stance(unit: UnitState, action: Action) -> int:
 static func resolve(actions: Array, state: BattleState, tuning: Tuning) -> Result:
 	var result := Result.new()
 	var lured := _compute_lured(actions)   # FEINT action(obj) -> 是否诱骗成功
-	var order := _sort_actions(actions, state.hazard_modifiers.get("imbalance", -1))
+	var order := _sort_actions(actions, state, state.hazard_modifiers.get("imbalance", -1))
 	for a in order:
 		if a.unit == null or not a.unit.alive:
 			continue
@@ -56,13 +56,16 @@ static func _compute_lured(actions: Array) -> Dictionary:
 ## 优先级：有效速度降序 → 感知架势克制（克制方先）→ team 升序 → 原索引升序
 ## imba >= 0 时（imbalance 险地），架势 == imba 的单位 speed -2（影响有效速度）；
 ## imba == -1 时所有 eff == technique.speed → 与 M0–M2 排序完全一致（border guard）。
-static func _sort_actions(actions: Array, imba: int) -> Array:
+static func _sort_actions(actions: Array, state: BattleState, imba: int) -> Array:
 	var keyed: Array = []
 	for i in actions.size():
 		var act: Action = actions[i]
 		var eff: int = act.technique.speed
 		if imba >= 0 and act.unit != null and act.unit.stance == imba:
 			eff -= 2
+		# —— m4c: 水域格 speed -1（空 terrain 恒 0，旁路）——
+		if act.unit != null:
+			eff += TerrainRules.speed_delta(state.terrain, act.unit.grid_pos)
 		keyed.append([act, i, eff])
 	keyed.sort_custom(_compare)
 	return keyed.map(func(e): return e[0])
@@ -94,6 +97,9 @@ static func _apply_one(a: Action, state: BattleState, tuning: Tuning, result: Re
 			if blocker != null and blocker != u:
 				# 目标格被其他存活单位占据 → 阻挡，留原地（玩家验收：战棋不可重合）
 				result.log.append("%s 移动被阻挡（%s 占据 %s）" % [String(u.id), String(blocker.id), dest])
+			elif TerrainRules.blocks_move(state.terrain, dest):
+				# —— m4c: 障碍格不可落 ——
+				result.log.append("%s 移动被阻挡（地形 %s）" % [String(u.id), dest])
 			else:
 				u.grid_pos = dest
 				result.log.append("%s 移动到 %s" % [String(u.id), u.grid_pos])
@@ -119,6 +125,9 @@ static func _apply_one(a: Action, state: BattleState, tuning: Tuning, result: Re
 				var counters := Stance.counters(u.stance, target.stance)
 				base += tuning.counter_bonus_damage if counters else 0
 				var dmg: int = Opening.compute_damage(base, target.opening, tuning.opening_damage_mult, target.guard_broken)
+				# —— m4c: 高地格攻方 +1（先于 frenzy ×1.5）——
+				if TerrainRules.is_highland(state.terrain, u.grid_pos):
+					dmg += 1
 				# —— M4: frenzy（BossTrait.on_end_turn 置位）→ 伤害 ×1.5 ——
 				if u.frenzied:
 					dmg = int(dmg * 1.5)
