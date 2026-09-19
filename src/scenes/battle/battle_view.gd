@@ -80,7 +80,17 @@ func add_shake(amount: float) -> void:
 func _draw() -> void:
 	if state == null:
 		return
-	var grid_color := Color(0.4, 0.4, 0.4, 0.5)
+	# —— m4c: 地形 tile 底（空 terrain=旧观感直通）——
+	if state.terrain.size() > 0:
+		for y in grid_size.y:
+			for x in grid_size.x:
+				var tt: String = TerrainRules.at(state.terrain, Vector2i(x, y))
+				if tt == "":
+					tt = "plain"
+				var tex: Texture2D = SpriteDB.terrain_texture(tt)
+				if tex != null:
+					draw_texture(tex, Vector2(x * cell, y * cell))
+	var grid_color := Color(0.4, 0.4, 0.4, 0.25)
 	for x in grid_size.x + 1:
 		draw_line(Vector2(x * cell, 0), Vector2(x * cell, grid_size.y * cell), grid_color)
 	for y in grid_size.y + 1:
@@ -90,7 +100,15 @@ func _draw() -> void:
 			continue
 		var origin := Vector2(u.grid_pos.x * cell, u.grid_pos.y * cell)
 		var col: Color = TEAM_COLORS[u.team % TEAM_COLORS.size()]
-		draw_rect(Rect2(origin + Vector2(8, 8), Vector2(cell - 16, cell - 16)), col)
+		# —— m4c: 阵营底环（色盲安全）+ sprite 整数倍放大（缺资产回退色块）——
+		draw_arc(origin + Vector2(cell / 2.0, cell - 10.0), 16.0, PI, TAU, 24, col, 2.0)
+		var tex: Texture2D = SpriteDB.texture_for(u)
+		if tex != null:
+			var tex_scale := 2
+			var sz := tex.get_size() * tex_scale
+			draw_texture_rect(tex, Rect2(origin + Vector2((cell - sz.x) / 2.0, (cell - sz.y) / 2.0), sz), false)
+		else:
+			draw_rect(Rect2(origin + Vector2(8, 8), Vector2(cell - 16, cell - 16)), col)
 		# 描边：崩溃=红加粗；破绽警告(>=max-1)=闪红；否则角色色
 		var edge_col: Color = ROLE_COLORS[Stance.role(u.stance)]
 		var edge_w := 2.0
