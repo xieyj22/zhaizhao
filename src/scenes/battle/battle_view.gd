@@ -18,6 +18,7 @@ var flashes: Dictionary = {}          # 受击闪白：pos_key -> 计时
 
 func _ready() -> void:
 	set_process(true)
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # m4c spec §4.5: sprite 整数倍放大 nearest 保锐利
 
 func _process(delta: float) -> void:
 	_t += delta
