@@ -77,6 +77,7 @@
 - **明度压低**：整 tile 平均明度低于同屏人物平均明度；高光只允许 F5 余烬级微亮，不得出现 METAL/JIN_L 级亮度。
 - hazard（险地）：JIAO 基色为主，CUO_D/XUE_D 做暗色斑驳，裂纹走 墨 深沟 + 上缘 F5 余烬断线；裂纹为主视觉，宽度 1-2px，走向斜向优先（避免机械十字）。
 - 不描墨边（tile 边缘须连续，外扩描边会破坏无缝）；形体内局部裂纹沟可用墨。
+- **基底双锚（B2 补录）**：plain (110,106,95) 素面石板 / obstacle (125,117,104) 乱石——两值为 tile 基底专用色，出自 plan manifest 定稿，不属于第 1 节角色 24 色表；角色 sprite 的 24 色纪律不变。water/highland 沿用 WATER/EARTH 锚原值。
 
 ## 6. 导出规范
 
@@ -97,5 +98,5 @@ PYTHONUTF8=1 python tools/sprite_check.py <manifest.json> <ledger.json>
 ## 8. B2 批量产图约定
 
 - 目录：`assets/sprites/{boss,enemy,ally,hero,terrain}/`；boss 用角色名（如 `hailianzheng.png`），门派敌兵用 `F1-F8.png`，地形用语义名（如 `hazard.png`）。
-- 每张图用色必须全部出自第 1 节 24 色表；锚色 = 本命门派/元素锚（boss 用其门派锚）。
+- 每张图用色必须全部出自第 1 节 24 色表；锚色 = 本命门派/元素锚（boss 用其门派锚）。地形 tile 例外：允许第 5 节基底双锚（plain/obstacle）。
 - 产完逐张过验收器 + ledger 归档；人工目检剪影（1x 缩放下可辨识武器与阵营色）。

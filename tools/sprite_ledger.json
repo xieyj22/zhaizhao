@@ -1,0 +1,122 @@
+{
+ "assets/sprites/ally/F1.png": {
+  "colors": 12,
+  "sha256_16": "ffe0c2b0b943f29e"
+ },
+ "assets/sprites/ally/F2.png": {
+  "colors": 16,
+  "sha256_16": "7df66b7ba48742ae"
+ },
+ "assets/sprites/ally/F3.png": {
+  "colors": 10,
+  "sha256_16": "fae4e3284836d213"
+ },
+ "assets/sprites/ally/F4.png": {
+  "colors": 8,
+  "sha256_16": "67681b4c82732492"
+ },
+ "assets/sprites/ally/F5.png": {
+  "colors": 10,
+  "sha256_16": "22a63126bf9dccc1"
+ },
+ "assets/sprites/ally/F6.png": {
+  "colors": 7,
+  "sha256_16": "b423377b9580eeed"
+ },
+ "assets/sprites/ally/F7.png": {
+  "colors": 8,
+  "sha256_16": "57baa2229002fd34"
+ },
+ "assets/sprites/ally/F8.png": {
+  "colors": 7,
+  "sha256_16": "4b5ec72383e71ced"
+ },
+ "assets/sprites/boss/hailianzheng.png": {
+  "colors": 16,
+  "sha256_16": "e5be9cab81b8945e"
+ },
+ "assets/sprites/boss/leiwanjun.png": {
+  "colors": 16,
+  "sha256_16": "5ecfe433945db8a7"
+ },
+ "assets/sprites/boss/moqingniang.png": {
+  "colors": 11,
+  "sha256_16": "fe7a497d080c3bcb"
+ },
+ "assets/sprites/boss/peiyuan.png": {
+  "colors": 8,
+  "sha256_16": "3a83f54e0a29db1a"
+ },
+ "assets/sprites/boss/sikongyi.png": {
+  "colors": 11,
+  "sha256_16": "256a7328853e4e26"
+ },
+ "assets/sprites/boss/yanjiu.png": {
+  "colors": 12,
+  "sha256_16": "2c0db39fecb45375"
+ },
+ "assets/sprites/boss/yanwujiu.png": {
+  "colors": 11,
+  "sha256_16": "605773665d09a711"
+ },
+ "assets/sprites/boss/zongzhenglie.png": {
+  "colors": 14,
+  "sha256_16": "bf9452058967c576"
+ },
+ "assets/sprites/enemy/F1.png": {
+  "colors": 12,
+  "sha256_16": "f806d7d33402c54c"
+ },
+ "assets/sprites/enemy/F2.png": {
+  "colors": 16,
+  "sha256_16": "2544b32f4141f5a1"
+ },
+ "assets/sprites/enemy/F3.png": {
+  "colors": 10,
+  "sha256_16": "3af42191806bba5c"
+ },
+ "assets/sprites/enemy/F4.png": {
+  "colors": 8,
+  "sha256_16": "fda8ac0bcbb76c5e"
+ },
+ "assets/sprites/enemy/F5.png": {
+  "colors": 10,
+  "sha256_16": "6afa5dc103698ed3"
+ },
+ "assets/sprites/enemy/F6.png": {
+  "colors": 7,
+  "sha256_16": "8c19543deab7c5b4"
+ },
+ "assets/sprites/enemy/F7.png": {
+  "colors": 10,
+  "sha256_16": "85b61f12b1d4a9d9"
+ },
+ "assets/sprites/enemy/F8.png": {
+  "colors": 10,
+  "sha256_16": "d18ec9349fddddf8"
+ },
+ "assets/sprites/hero/protagonist.png": {
+  "colors": 13,
+  "sha256_16": "6d0e353c623112de"
+ },
+ "assets/sprites/terrain/hazard.png": {
+  "colors": 5,
+  "sha256_16": "fcfd3126bd740aa3"
+ },
+ "assets/sprites/terrain/highland.png": {
+  "colors": 6,
+  "sha256_16": "eb8fd5a8dd98beb4"
+ },
+ "assets/sprites/terrain/obstacle.png": {
+  "colors": 5,
+  "sha256_16": "8c20dd61f6a08444"
+ },
+ "assets/sprites/terrain/plain.png": {
+  "colors": 4,
+  "sha256_16": "1ba7c22278626f95"
+ },
+ "assets/sprites/terrain/water.png": {
+  "colors": 5,
+  "sha256_16": "67337dc851b89413"
+ }
+}
