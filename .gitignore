@@ -1,5 +1,6 @@
 .godot/
 *.import
+!assets/sprites/**/*.import
 export_presets.cfg
 /build/
 *.exe
