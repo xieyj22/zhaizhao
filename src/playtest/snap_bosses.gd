@@ -22,15 +22,24 @@ func _initialize() -> void:
 	call_deferred("_snap_all")
 
 var dialog_mode := false
+var terrain_mode := false
+var plain_mode := false
 var frames_before_shot := FRAMES_BEFORE_SHOT
 
 func _snap_all() -> void:
 	# --dialog（user args）：replay=false → _ready 自动弹战前对白框（Task 13 Step 4
 	# 对白快照用）；多等帧盖过 DialogBox 0.18s 淡入。默认仍 replay=true 截战斗本体。
+	# --terrain（B3）：单拍 hazard 节点（battle_builder 自动地形 + sprite），
+	#   供 tools/snap_terrain_check.py PIL 断言；--plain 子旗标拍同构对照
+	#   （terrain={} 显式覆盖 → 空地形旧观感，敌人/站位不变）。
 	for a: String in OS.get_cmdline_user_args():
 		if a == "--dialog":
 			dialog_mode = true
 			frames_before_shot = 12
+		elif a == "--terrain":
+			terrain_mode = true
+		elif a == "--plain":
+			plain_mode = true
 	DirAccess.make_dir_recursive_absolute(SHOTS_DIR)
 	# 首玩默认 meta（足够构造 boss 战）；每 boss 新 run 保证确定性。
 	var meta := MetaState.new_first_play()
@@ -42,6 +51,9 @@ func _snap_all() -> void:
 	if meta_session == null:
 		push_error("snap_bosses: autoload /root/MetaSession 未找到")
 		quit(1)
+		return
+	if terrain_mode:
+		await _snap_terrain(meta, root, meta_session)
 		return
 	var results: Array = []   # [{bid, path, ok, err}]
 	for bid in ids:
@@ -105,6 +117,38 @@ func _snap_one(bid: String, meta: MetaState, root: Window, meta_session: Node) -
 	if err_code != OK:
 		return "save_png 错误码 %d" % err_code
 	return ""
+
+## --terrain 单拍（B3）：hazard 节点 node_cfg → battle_builder 自动地形 + sprite。
+## --plain 子旗标：terrain={} 显式覆盖（builder 覆盖优先）→ 空地形同构对照图。
+## 非 headless 帧率非确定（数百 fps）→ 数帧不可靠，create_timer 真实计时 1s 等渲染稳定。
+func _snap_terrain(meta: MetaState, root: Window, meta_session: Node) -> void:
+	var run := RunFactory.init_run(meta, SEED)
+	meta_session.set("current_run", run)
+	var node_cfg: Dictionary = {"id": "snap_terrain", "node_type": "hazard", "risk": 1, "replay": true}
+	var fname := "snapt_terrain.png"
+	if plain_mode:
+		node_cfg["terrain"] = {}
+		fname = "snapt_plain.png"
+	meta_session.set("current_node_cfg", node_cfg)
+	# 诊断行：terrain 格数（区分"生成空"与"渲染失效"两类失败）
+	print("snapt terrain cells: %d" % BattleBuilder.build(run, node_cfg).terrain.size())
+	var tscn := load(BATTLE_TSCN_PATH) as PackedScene
+	if tscn == null:
+		print("snapt ERR: 无法加载 battle.tscn")
+		quit(1)
+		return
+	var battle := tscn.instantiate() as Node2D
+	root.add_child(battle)
+	await create_timer(1.0).timeout
+	var img := battle.get_viewport().get_texture().get_image()
+	var path := SHOTS_DIR + fname
+	var err_code: int = img.save_png(path)
+	if err_code != OK:
+		print("snapt ERR: save_png 错误码 %d" % err_code)
+		quit(1)
+		return
+	print("snapt -> %s ok" % path)
+	quit()
 
 func _cleanup(battle: Node2D) -> void:
 	if battle != null and is_instance_valid(battle):
