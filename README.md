@@ -30,6 +30,7 @@ zhaizhao/
 │   └── scenes/      # hub / battle 等场景
 ├── tests/           # GUT 测试
 ├── addons/          # GUT 等插件
+├── assets/sprites/  # 像素 sprite（boss/enemy/ally/terrain，24 色圣经 + tools/sprite_check.py 验收）
 └── docs/            # 设计文档
 ```
 
